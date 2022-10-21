@@ -114,10 +114,11 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 		pattern := `\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*`
 		reg := regexp.MustCompile(pattern)
 		if reg.MatchString(author) {
+			newAuthor := strings.Split(author, "@")[0]
 			if len(rawSql) == 19 {
-				rawSql += fmt.Sprintf(" where reporter='%s'", author)
+				rawSql += fmt.Sprintf(" where reporter regexp '^%s'", newAuthor)
 			} else {
-				rawSql += fmt.Sprintf(" and reporter='%s'", author)
+				rawSql += fmt.Sprintf(" and reporter regexp '^%s'", newAuthor)
 			}
 		} else {
 			if len(rawSql) == 19 {
@@ -219,8 +220,18 @@ func (c *IssuesController) Get() {
 	count, sql := formQueryIssueSql(qp)
 	o := orm.NewOrm()
 	_, err := o.Raw(sql).QueryRows(&issue)
+	res := make([]models.Issue, 0)
 	if err == nil {
-		c.ApiDataReturn(count, page, perPage, issue)
+		for _, i := range issue {
+			reporter := i.Reporter
+			if reporter != "" {
+				tail := reporter[len(reporter)-1:]
+				reporter = strings.Split(reporter, "@")[0] + "@***" + tail
+				i.Reporter = reporter
+			}
+			res = append(res, i)
+		}
+		c.ApiDataReturn(count, page, perPage, res)
 	}
 }
 
@@ -316,23 +327,27 @@ func (c *AuthorsController) Get() {
 	if err != nil {
 		c.ApiJsonReturn("分页查询错误", 400, err)
 	}
+	pattern := `\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*`
+	reg := regexp.MustCompile(pattern)
 	res := make([]string, 0)
 	for _, i := range issue2 {
-		if i.Reporter != "" {
-			res = append(res, i.Reporter)
-		} else {
-			if i.Author != "" {
-				res = append(res, i.Author)
-			}
+		author := i.Author
+		if reg.MatchString(author) {
+			author = strings.Split(author, "@")[0] + "@***" + author[len(author)-1:]
 		}
+		res = append(res, author)
 	}
 	if keyWord == "" {
 		c.ApiDataReturn(count, page, perPage, res)
 	} else {
 		newRes := make([]string, 0)
 		for _, j := range issue {
-			if strings.Contains(j.Author, keyWord) {
-				newRes = append(newRes, j.Author)
+			author := j.Author
+			if reg.MatchString(author) {
+				author = strings.Split(author, "@")[0] + "@***" + author[len(author)-1:]
+			}
+			if strings.Contains(author, keyWord) {
+				newRes = append(newRes, author)
 			}
 		}
 		count = int64(len(newRes))
