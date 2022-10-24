@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
 
@@ -111,14 +110,14 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 		}
 	}
 	if author != "" {
-		pattern := `\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*`
-		reg := regexp.MustCompile(pattern)
-		if reg.MatchString(author) {
+		if strings.Contains(author, "@") {
 			newAuthor := strings.Split(author, "@")[0]
-			if len(rawSql) == 19 {
-				rawSql += fmt.Sprintf(" where reporter regexp '^%s'", newAuthor)
-			} else {
-				rawSql += fmt.Sprintf(" and reporter regexp '^%s'", newAuthor)
+			if newAuthor != "" {
+				if len(rawSql) == 19 {
+					rawSql += fmt.Sprintf(" where reporter regexp '^%s'", newAuthor)
+				} else {
+					rawSql += fmt.Sprintf(" and reporter regexp '^%s'", newAuthor)
+				}
 			}
 		} else {
 			if len(rawSql) == 19 {
@@ -229,6 +228,12 @@ func (c *IssuesController) Get() {
 				reporter = strings.Split(reporter, "@")[0] + "@***" + tail
 				i.Reporter = reporter
 			}
+			title := i.Title
+			rawTitle, _ := base64.StdEncoding.DecodeString(title)
+			i.Title = string(rawTitle)
+			description := i.Description
+			rawDescription, _ := base64.StdEncoding.DecodeString(description)
+			i.Description = string(rawDescription)
 			res = append(res, i)
 		}
 		c.ApiDataReturn(count, page, perPage, res)
@@ -327,12 +332,10 @@ func (c *AuthorsController) Get() {
 	if err != nil {
 		c.ApiJsonReturn("分页查询错误", 400, err)
 	}
-	pattern := `\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*`
-	reg := regexp.MustCompile(pattern)
 	res := make([]string, 0)
 	for _, i := range issue2 {
 		author := i.Author
-		if reg.MatchString(author) {
+		if strings.Contains(author, "@") {
 			author = strings.Split(author, "@")[0] + "@***" + author[len(author)-1:]
 		}
 		res = append(res, author)
@@ -343,7 +346,7 @@ func (c *AuthorsController) Get() {
 		newRes := make([]string, 0)
 		for _, j := range issue {
 			author := j.Author
-			if reg.MatchString(author) {
+			if strings.Contains(author, "@") {
 				author = strings.Split(author, "@")[0] + "@***" + author[len(author)-1:]
 			}
 			if strings.Contains(author, keyWord) {
