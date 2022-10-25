@@ -28,7 +28,7 @@ func SyncEnterprisePulls() error {
 	page := 1
 	for {
 		url := fmt.Sprintf("https://gitee.com/api/v5/enterprise/open_euler/pull_requests?state=all&sort=created"+
-			"&direction=desc&page=%v&per_page=100&access_token=%v", page, token)
+			"&direction=asc&page=%v&per_page=100&access_token=%v", page, token)
 		resp, err := http.Get(url)
 		if err != nil {
 			logs.Error("Fail to get enterprise pull requests, err：", err)
@@ -129,7 +129,7 @@ func SyncEnterpriseIssues() error {
 	page := 1
 	for {
 		url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/issues?state=all&sort=created"+
-			"&direction=desc&page=%v&per_page=100&access_token=%v", page, token)
+			"&direction=asc&page=%v&per_page=100&access_token=%v", page, token)
 		resp, err := http.Get(url)
 		if err != nil {
 			logs.Error("Fail to get enterprise issues, err：", err)
