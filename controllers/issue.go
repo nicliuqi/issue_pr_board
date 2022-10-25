@@ -228,9 +228,6 @@ func (c *IssuesController) Get() {
 				reporter = strings.Split(reporter, "@")[0] + "@***" + tail
 				i.Reporter = reporter
 			}
-			title := i.Title
-			rawTitle, _ := base64.StdEncoding.DecodeString(title)
-			i.Title = string(rawTitle)
 			description := i.Description
 			rawDescription, _ := base64.StdEncoding.DecodeString(description)
 			i.Description = string(rawDescription)
