@@ -16,7 +16,7 @@ func init() {
 
 func main() {
 	tk1 := toolbox.NewTask("syncEnterprisePulls", "0 0 3 * * 6", SyncEnterprisePulls)
-	tk2 := toolbox.NewTask("syncEnterpriseIssues", "0 0 3 * * 0", SyncEnterpriseIssues)
+	tk2 := toolbox.NewTask("syncEnterpriseIssues", "0 0 3 * * ?", SyncEnterpriseIssues)
 	tk3 := toolbox.NewTask("syncEnterpriseRepos", "0 0 1 * * ?", SyncEnterpriseRepos)
 	tk4 := toolbox.NewTask("syncSecret", "0 0 0 * * ?", models.SyncSecret)
 	tk5 := toolbox.NewTask("cleanVerification", "0 */10 * * * *", controllers.CleanVerification)

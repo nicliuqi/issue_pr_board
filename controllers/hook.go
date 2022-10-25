@@ -162,7 +162,7 @@ func HandlePullEvent(reqBody map[string]interface{}) {
 	repo := strings.Split(htmlUrl, "/")[4]
 	fullName := org + "/" + repo
 	number := strings.Split(htmlUrl, "/")[6]
-	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/pulls/%v", fullName, number)
+	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/pulls/%v?access_token=%v", fullName, number, os.Getenv("AccessToken"))
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get enterprise pull requests, err：", err)
