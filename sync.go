@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/orm"
@@ -176,6 +177,12 @@ func SyncEnterpriseIssues() error {
 				assigneeLogin = assignee.(map[string]interface{})["login"].(string)
 			}
 			title := issue["title"].(string)
+			title = base64.StdEncoding.EncodeToString([]byte(title))
+			description := issue["body"]
+			if description == nil {
+				description = ""
+			}
+			description = base64.StdEncoding.EncodeToString([]byte(description.(string)))
 			labels := issue["labels"]
 			priorityNum := issue["priority"]
 			priority := controllers.GetIssuePriority(priorityNum.(float64))
@@ -203,6 +210,7 @@ func SyncEnterpriseIssues() error {
 			ti.CreatedAt = utils.FormatTime(createdAt)
 			ti.UpdatedAt = utils.FormatTime(updatedAt)
 			ti.Title = title
+			ti.Description = description.(string)
 			ti.Priority = priority
 			ti.Labels = strings.Join(tags, ",")
 			ti.Branch = branch.(string)
@@ -223,6 +231,7 @@ func SyncEnterpriseIssues() error {
 					"created_at":  ti.CreatedAt,
 					"updated_at":  ti.UpdatedAt,
 					"title":       ti.Title,
+					"description": ti.Description,
 					"priority":    ti.Priority,
 					"labels":      ti.Labels,
 					"branch":      ti.Branch,
