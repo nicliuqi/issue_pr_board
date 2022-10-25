@@ -77,7 +77,6 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 		assigneeLogin = assignee.(map[string]interface{})["login"].(string)
 	}
 	title := issue["title"].(string)
-	title = base64.StdEncoding.EncodeToString([]byte(title))
 	description := issue["body"]
 	if description == nil {
 		description = ""
