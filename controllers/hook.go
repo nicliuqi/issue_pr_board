@@ -138,6 +138,19 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 		if err != nil {
 			logs.Error("Update issue event failed, err:", err)
 		}
+		if action == "comment" {
+			commenterId := reqBody["author"].(map[string]interface{})["login"].(string)
+			if commenterId == "openeuler-ci-bot" {
+				return
+			}
+			var item models.Issue
+			_ = qs.Filter("number", ti.Number).One(&item)
+			if item.Reporter == "" {
+				return
+			}
+			commentBody := reqBody["comment"].(map[string]interface{})["body"].(string)
+			err = utils.SendCommentAttentionEmail(item.Reporter, commenterId, number, title, htmlUrl, commentBody)
+		}
 	} else {
 		o := orm.NewOrm()
 		_, err := o.Insert(&ti)
@@ -241,9 +254,7 @@ func (c *HooksController) Post() {
 		return
 	}
 	action := headers["X-Gitee-Event"]
-	logs.Info("Receive a", action)
 	body := c.Ctx.Input.RequestBody
-	logs.Info(collection.Collect(string(body)).ToJson())
 	reqBody := collection.Collect(string(body)).ToMap()
 	switch {
 	case collection.Collect(action).Contains("Issue Hook"):
