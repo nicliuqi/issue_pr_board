@@ -542,6 +542,21 @@ type IssueTypeResponse struct {
 }
 
 func (c *TypesController) Get() {
+	mode := c.GetString("mode", "")
+	if mode == "local" {
+		var issue []models.Issue
+		o := orm.NewOrm()
+		searchSql := "select distinct issue_type from issue"
+		_, err := o.Raw(searchSql).QueryRows(&issue)
+		if err != nil {
+			logs.Error("Fail to search issue types, err:", err)
+		}
+		res := make([]string, 0)
+		for _, i := range issue {
+			res = append(res, i.IssueType)
+		}
+		c.ApiJsonReturn("请求成功", 200, res)
+	}
 	token := models.GetV8Token(3)
 	enterpriseId := os.Getenv("EnterpriseId")
 	url := fmt.Sprintf("https://api.gitee.com/enterprises/%s/issue_types?page=1&per_page=100&access_token=%s", enterpriseId, token)
