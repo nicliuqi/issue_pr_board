@@ -114,6 +114,8 @@ func (c *PullsController) Get() {
 		Assignee:  c.GetString("assignee", ""),
 		Sort:      c.GetString("sort", ""),
 		Direction: c.GetString("direction", ""),
+		Label:     c.GetString("label", ""),
+		Search:    c.GetString("search", ""),
 		Page:      page,
 		PerPage:   perPage,
 	}
