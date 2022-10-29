@@ -40,17 +40,17 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 	url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/issues/%v?access_token=%v", number, os.Getenv("AccessToken"))
 	resp, err := http.Get(url)
 	if err != nil {
-		logs.Error("Fail to get repo members, err：", err)
+		logs.Error("Fail to get the issue, err：", err)
 		return
 	}
 	if resp.StatusCode != 200 {
-		logs.Error("Get unexpected response when getting repo members, status:", resp.Status)
+		logs.Error("Get unexpected response when getting the issue, status:", resp.Status)
 		return
 	}
 	body, _ := ioutil.ReadAll(resp.Body)
 	err = resp.Body.Close()
 	if err != nil {
-		logs.Error("Fail to close response body of repo members, err:", err)
+		logs.Error("Fail to close response body of the issue, err:", err)
 		return
 	}
 	issue := utils.JsonToMap(string(body))
@@ -150,6 +150,9 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 			}
 			commentBody := reqBody["comment"].(map[string]interface{})["body"].(string)
 			err = utils.SendCommentAttentionEmail(item.Reporter, commenterId, number, title, htmlUrl, commentBody)
+			if err != nil {
+				logs.Error("Fail to send email, err:", err)
+			}
 		}
 	} else {
 		o := orm.NewOrm()
@@ -177,17 +180,17 @@ func HandlePullEvent(reqBody map[string]interface{}) {
 	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/pulls/%v?access_token=%v", fullName, number, os.Getenv("AccessToken"))
 	resp, err := http.Get(url)
 	if err != nil {
-		logs.Error("Fail to get enterprise pull requests, err：", err)
+		logs.Error("Fail to get the pull request, err：", err)
 		return
 	}
 	if resp.StatusCode != 200 {
-		logs.Error("Get unexpected response when getting enterprise pulls, status:", resp.Status)
+		logs.Error("Get unexpected response when getting the pull request, status:", resp.Status)
 		return
 	}
 	body, _ := ioutil.ReadAll(resp.Body)
 	err = resp.Body.Close()
 	if err != nil {
-		logs.Error("Fail to close response body of enterprise pull requests, err：", err)
+		logs.Error("Fail to close response body of the pull request, err：", err)
 		return
 	}
 	pull := utils.JsonToMap(string(body))
@@ -197,6 +200,12 @@ func HandlePullEvent(reqBody map[string]interface{}) {
 	createdAt := pull["created_at"].(string)
 	updatedAt := pull["updated_at"].(string)
 	sig := utils.GetSigByRepo(repos, fullName)
+	title := pull["title"].(string)
+	description := pull["body"]
+	if description == nil {
+		description = ""
+	}
+	description = base64.StdEncoding.EncodeToString([]byte(description.(string)))
 	labels := pull["labels"]
 	assignees := pull["assignees"]
 	labelsSlice := make([]string, 0)
@@ -222,17 +231,25 @@ func HandlePullEvent(reqBody map[string]interface{}) {
 	tp.Assignees = strings.Join(assigneesSlice, ",")
 	tp.CreatedAt = utils.FormatTime(createdAt)
 	tp.UpdatedAt = utils.FormatTime(updatedAt)
-	pullExists := SearchPullRecord(htmlUrl)
-	if pullExists == true {
+	tp.Title = title
+	tp.Description = description.(string)
+	tp.Labels = strings.Join(labelsSlice, ",")
+	if SearchPullRecord(htmlUrl) {
 		o := orm.NewOrm()
 		qs := o.QueryTable("pull")
 		_, err := qs.Filter("link", tp.Link).Update(orm.Params{
-			"ref":        tp.Ref,
-			"sig":        tp.Sig,
-			"state":      tp.State,
-			"author":     tp.Author,
-			"assignees":  tp.Assignees,
-			"updated_at": tp.UpdatedAt,
+			"org":         tp.Org,
+			"repo":        tp.Repo,
+			"ref":         tp.Ref,
+			"sig":         tp.Sig,
+			"state":       tp.State,
+			"author":      tp.Author,
+			"assignees":   tp.Assignees,
+			"created_at":  tp.CreatedAt,
+			"updated_at":  tp.UpdatedAt,
+			"title":       tp.Title,
+			"description": tp.Description,
+			"labels":      tp.Labels,
 		})
 		if err != nil {
 			logs.Error("Update pull event failed, err:", err)

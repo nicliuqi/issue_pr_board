@@ -15,6 +15,7 @@ func JsonToSlice(str string) []map[string]interface{} {
 	var temSlice []map[string]interface{}
 	err := json.Unmarshal([]byte(str), &temSlice)
 	if err != nil {
+		logs.Error(err)
 		logs.Error("Parse string to slice error, the string is:", str)
 		return nil
 	}
@@ -25,6 +26,7 @@ func JsonToMap(str string) map[string]interface{} {
 	var tempMap map[string]interface{}
 	err := json.Unmarshal([]byte(str), &tempMap)
 	if err != nil {
+		logs.Error(err)
 		logs.Error("Parse string to map error, the string is:", str)
 		return nil
 	}
@@ -41,7 +43,7 @@ func GetSigsMapping() (map[string][]string, map[string]string) {
 		"&recursive=1", os.Getenv("AccessToken"))
 	resp, err := http.Get(url)
 	if err != nil {
-		logs.Error("Fail to get sigs mapping, url: %v, err: %v", url, err)
+		logs.Error("Fail to get sigs mapping, err: %v", err)
 		return nil, nil
 	}
 	body, _ := ioutil.ReadAll(resp.Body)

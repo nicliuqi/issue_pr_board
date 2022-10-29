@@ -44,7 +44,7 @@ type QueryIssueParam struct {
 }
 
 func formQueryIssueSql(q QueryIssueParam) (int64, string) {
-	rawSql := "select * from issue"
+	rawSql := "select * from issue where sig != 'Private'"
 	org := q.Org
 	repo := q.Repo
 	sig := q.Sig
@@ -72,106 +72,53 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 				issueStateSql += fmt.Sprintf(" or issue_state='%s'", issueStateStr)
 			}
 		}
-		rawSql += fmt.Sprintf(" where (%s)", issueStateSql)
+		rawSql += fmt.Sprintf(" and (%s)", issueStateSql)
 	}
 	if state != "" {
-		if len(rawSql) == 19 {
-			rawSql += fmt.Sprintf(" where state='%s'", state)
-		} else {
-			rawSql += fmt.Sprintf(" and state='%s'", state)
-		}
+		rawSql += fmt.Sprintf(" and state='%s'", state)
 	}
 	if org != "" {
-		if len(rawSql) == 19 {
-			rawSql += fmt.Sprintf(" where org='%s'", org)
-		} else {
-			rawSql += fmt.Sprintf(" and org='%s'", org)
-		}
+		rawSql += fmt.Sprintf(" and org='%s'", org)
 	}
 	if repo != "" {
-		if len(rawSql) == 19 {
-			rawSql += fmt.Sprintf(" where repo='%s'", repo)
-		} else {
-			rawSql += fmt.Sprintf(" and repo='%s'", repo)
-		}
+		rawSql += fmt.Sprintf(" and repo='%s'", repo)
 	}
 	if sig != "" {
-		if len(rawSql) == 19 {
-			rawSql += fmt.Sprintf(" where sig='%s'", sig)
-		} else {
-			rawSql += fmt.Sprintf(" and sig='%s'", sig)
-		}
+		rawSql += fmt.Sprintf(" and sig='%s'", sig)
 	}
 	if number != "" {
-		if len(rawSql) == 19 {
-			rawSql += fmt.Sprintf(" where number='%s'", number)
-		} else {
-			rawSql += fmt.Sprintf(" and number='%s'", number)
-		}
+		rawSql += fmt.Sprintf(" and number='%s'", number)
 	}
 	if author != "" {
 		if strings.Contains(author, "@") {
 			newAuthor := strings.Split(author, "@")[0]
 			if newAuthor != "" {
-				if len(rawSql) == 19 {
-					rawSql += fmt.Sprintf(" where reporter regexp '^%s'", newAuthor)
-				} else {
-					rawSql += fmt.Sprintf(" and reporter regexp '^%s'", newAuthor)
-				}
+				rawSql += fmt.Sprintf(" and reporter regexp '^%s'", newAuthor)
 			}
 		} else {
-			if len(rawSql) == 19 {
-				rawSql += fmt.Sprintf(" where author='%s'", author)
-			} else {
-				rawSql += fmt.Sprintf(" and author='%s'", author)
-			}
+			rawSql += fmt.Sprintf(" and author='%s'", author)
 		}
 	}
 	if assignee != "" {
-		if len(rawSql) == 19 {
-			rawSql += fmt.Sprintf(" where assignee='%s'", assignee)
-		} else {
-			rawSql += fmt.Sprintf(" and assignee='%s'", assignee)
-		}
+		rawSql += fmt.Sprintf(" and assignee='%s'", assignee)
 	}
 	if branch != "" {
-		if len(rawSql) == 19 {
-			rawSql += fmt.Sprintf(" where branch='%s'", branch)
-		} else {
-			rawSql += fmt.Sprintf(" and branch='%s'", branch)
-		}
+		rawSql += fmt.Sprintf(" and branch='%s'", branch)
 	}
 	if label != "" {
 		label = strings.Replace(label, "，", ",", -1)
 		for _, labelStr := range strings.Split(label, ",") {
-			if len(rawSql) == 19 {
-				rawSql += fmt.Sprintf(" where instr (labels, '%s')", labelStr)
-			} else {
-				rawSql += fmt.Sprintf(" and instr (labels, '%s')", labelStr)
-			}
+			rawSql += fmt.Sprintf(" and instr (labels, '%s')", labelStr)
 		}
 	}
 	if issueType != "" {
-		if len(rawSql) == 19 {
-			rawSql += fmt.Sprintf(" where issue_type='%s'", issueType)
-		} else {
-			rawSql += fmt.Sprintf(" and issue_type='%s'", issueType)
-		}
+		rawSql += fmt.Sprintf(" and issue_type='%s'", issueType)
 	}
 	if priority != "" {
-		if len(rawSql) == 19 {
-			rawSql += fmt.Sprintf(" where priority='%s'", priority)
-		} else {
-			rawSql += fmt.Sprintf(" and priority='%s'", priority)
-		}
+		rawSql += fmt.Sprintf(" and priority='%s'", priority)
 	}
 	if search != "" {
-		var searchSql string
-		if len(rawSql) == 19 {
-			searchSql = " where concat (repo, title, number) like '%{search}%'"
-		} else {
-			searchSql = " and concat (repo, title, number) like '%{search}%'"
-		}
+		searchSql := " and concat (repo, title, number) like '%{search}%'"
 		rawSql += strings.Replace(searchSql, "{search}", search, -1)
 	}
 	if sort != "updated_at" {
@@ -271,7 +218,7 @@ func (c *IssuesController) Post() {
 	content, _ := ioutil.ReadAll(resp.Body)
 	err = resp.Body.Close()
 	if err != nil {
-		logs.Error("Fail to close response body of enterprise issues, err:", err)
+		logs.Error("Fail to close response body of creating enterprise issues, err:", err)
 		c.ApiJsonReturn("无法关闭创建issue的响应", 400, err)
 	}
 	logs.Info("An issue has been created, ready to save the info")
@@ -562,18 +509,18 @@ func (c *TypesController) Get() {
 	url := fmt.Sprintf("https://api.gitee.com/enterprises/%s/issue_types?page=1&per_page=100&access_token=%s", enterpriseId, token)
 	resp, err := http.Get(url)
 	if err != nil {
-		logs.Error("Fail to get enterprise pull requests, err：", err)
+		logs.Error("Fail to get enterprise issue types, err:", err)
 		c.ApiJsonReturn("获取任务类型列表失败", 400, err)
 	}
 	if resp.StatusCode != 200 {
-		logs.Error("Get unexpected response when getting enterprise pulls, status:", resp.Status)
+		logs.Error("Get unexpected response when getting enterprise issue types, status:", resp.Status)
 		c.ApiJsonReturn("获取任务类型列表响应未知", resp.StatusCode, resp.Body)
 	}
 	body, _ := ioutil.ReadAll(resp.Body)
 	defer func(Body io.ReadCloser) {
-		err := Body.Close()
+		err = Body.Close()
 		if err != nil {
-			logs.Error("Fail to close response body of enterprise pull requests, err：", err)
+			logs.Error("Fail to close response body of enterprise issue types, err：", err)
 		}
 	}(resp.Body)
 	res := make([]map[string]interface{}, 0)
@@ -610,7 +557,7 @@ func (c *UploadAttachmentController) Post() {
 	logs.Info("Ready to upload a attachment")
 	file, h, err := c.GetFile("file")
 	defer func(file multipart.File) {
-		err := file.Close()
+		err = file.Close()
 		if err != nil {
 			logs.Error("Fail to close uploaded file, err:", err)
 		}
@@ -634,7 +581,7 @@ func (c *UploadAttachmentController) Post() {
 		logs.Error("Fail to open uploadFile")
 	}
 	defer func(uploadFile multipart.File) {
-		err := uploadFile.Close()
+		err = uploadFile.Close()
 		if err != nil {
 			logs.Error("Fail to close file")
 		}
@@ -662,7 +609,7 @@ func (c *UploadAttachmentController) Post() {
 		logs.Error("Fail to get response")
 	}
 	defer func(Body io.ReadCloser) {
-		err := Body.Close()
+		err = Body.Close()
 		if err != nil {
 			logs.Error("Fail to close body")
 		}
@@ -691,7 +638,7 @@ func (c *UploadImageController) Post() {
 	logs.Info("Ready to upload a image")
 	file, _, err := c.GetFile("file")
 	defer func(file multipart.File) {
-		err := file.Close()
+		err = file.Close()
 		if err != nil {
 			logs.Error(err)
 		}
@@ -700,7 +647,7 @@ func (c *UploadImageController) Post() {
 		return
 	}
 	buf := bytes.NewBuffer(nil)
-	if _, err := io.Copy(buf, file); err != nil {
+	if _, err = io.Copy(buf, file); err != nil {
 		return
 	}
 	bufWriter := bufio.NewWriter(buf)
@@ -733,7 +680,7 @@ func (c *UploadImageController) Post() {
 		return
 	}
 	defer func(Body io.ReadCloser) {
-		err := Body.Close()
+		err = Body.Close()
 		if err != nil {
 			logs.Error("Fail to close response body of uploading file")
 		}

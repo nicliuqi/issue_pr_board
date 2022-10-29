@@ -9,6 +9,7 @@ import (
 	"issue_pr_board/models"
 	"net/http"
 	"os"
+	"strings"
 )
 
 type ReposController struct {
@@ -32,9 +33,9 @@ func formQueryRepoSql(q QueryRepoParam) (int64, string) {
 	direction := q.Direction
 	if keyword != "" {
 		if len(rawSql) == 18 {
-			rawSql += fmt.Sprintf(" where instr (name, '%s')", keyword)
+			rawSql += fmt.Sprintf(" where instr (name, '%s')", strings.ToLower(keyword))
 		} else {
-			rawSql += fmt.Sprintf(" where instr (name, '%s')", keyword)
+			rawSql += fmt.Sprintf(" where instr (name, '%s')", strings.ToLower(keyword))
 		}
 	}
 	if sig != "" {
@@ -100,6 +101,7 @@ type RepoResponse struct {
 }
 
 func SyncRepoNumber() error {
+	logs.Info("Starting to sync repos numbers...")
 	token := models.GetV8Token(3)
 	if token == "" {
 		logs.Warn("Cannot get a valid V8 access token")
@@ -151,10 +153,10 @@ func SyncRepoNumber() error {
 				if err != nil {
 					logs.Error("Update repo enterprise number failed, err:", err)
 				}
-				logs.Info("更新仓库", repo.PathWithNamespace)
 			}
 		}
 		page += 1
 	}
+	logs.Info("Ends of repos numbers sync, wait the next time...")
 	return nil
 }
