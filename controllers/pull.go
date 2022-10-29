@@ -3,7 +3,10 @@ package controllers
 import (
 	"fmt"
 	"github.com/astaxie/beego/orm"
+	"github.com/chenhg5/collection"
 	"issue_pr_board/models"
+	"sort"
+	"strings"
 )
 
 type PullsController struct {
@@ -18,6 +21,8 @@ type QueryPullParam struct {
 	Ref       string
 	Author    string
 	Assignee  string
+	Label     string
+	Search    string
 	Sort      string
 	Direction string
 	Page      int
@@ -25,7 +30,7 @@ type QueryPullParam struct {
 }
 
 func formQueryPullSql(q QueryPullParam) (int64, string) {
-	rawSql := "select * from pull"
+	rawSql := "select * from pull where sig != 'Private'"
 	org := q.Org
 	repo := q.Repo
 	sig := q.Sig
@@ -33,58 +38,51 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 	ref := q.Ref
 	assignee := q.Assignee
 	author := q.Author
+	label := q.Label
+	search := q.Search
 	sort := q.Sort
 	direction := q.Direction
 	page := q.Page
 	perPage := q.PerPage
 	if state != "" {
-		if len(rawSql) == 18 {
-			rawSql += fmt.Sprintf(" where state='%s'", state)
-		} else {
-			rawSql += fmt.Sprintf(" and state='%s'", state)
+		state = strings.Replace(state, "，", ",", -1)
+		stateSql := ""
+		for index, stateStr := range strings.Split(state, ",") {
+			if index == 0 {
+				stateSql += fmt.Sprintf("state='%s'", stateStr)
+			} else {
+				stateSql += fmt.Sprintf(" or state='%s'", stateStr)
+			}
 		}
+		rawSql += fmt.Sprintf(" and (%s)", stateSql)
 	}
 	if org != "" {
-		if len(rawSql) == 18 {
-			rawSql += fmt.Sprintf(" where org='%s'", org)
-		} else {
-			rawSql += fmt.Sprintf(" and org='%s'", org)
-		}
+		rawSql += fmt.Sprintf(" and org='%s'", org)
 	}
 	if repo != "" {
-		if len(rawSql) == 18 {
-			rawSql += fmt.Sprintf(" where repo='%s'", repo)
-		} else {
-			rawSql += fmt.Sprintf(" and repo='%s'", repo)
-		}
+		rawSql += fmt.Sprintf(" and repo='%s'", repo)
 	}
 	if sig != "" {
-		if len(rawSql) == 18 {
-			rawSql += fmt.Sprintf(" where sig='%s'", sig)
-		} else {
-			rawSql += fmt.Sprintf(" and sig='%s'", sig)
-		}
+		rawSql += fmt.Sprintf(" and sig='%s'", sig)
 	}
 	if ref != "" {
-		if len(rawSql) == 18 {
-			rawSql += fmt.Sprintf(" where ref='%s'", ref)
-		} else {
-			rawSql += fmt.Sprintf(" and ref='%s'", ref)
-		}
+		rawSql += fmt.Sprintf(" and ref='%s'", ref)
 	}
 	if author != "" {
-		if len(rawSql) == 18 {
-			rawSql += fmt.Sprintf(" where author='%s'", author)
-		} else {
-			rawSql += fmt.Sprintf(" and author='%s'", author)
-		}
+		rawSql += fmt.Sprintf(" and author='%s'", author)
 	}
 	if assignee != "" {
-		if len(rawSql) == 18 {
-			rawSql += fmt.Sprintf(" where instr (assignees, '%s')", assignee)
-		} else {
-			rawSql += fmt.Sprintf(" and instr (assignees, '%s')", assignee)
+		rawSql += fmt.Sprintf(" and instr (assignees, '%s')", assignee)
+	}
+	if label != "" {
+		label = strings.Replace(label, "，", ",", -1)
+		for _, labelStr := range strings.Split(label, ",") {
+			rawSql += fmt.Sprintf(" and instr (labels, '%s')", labelStr)
 		}
+	}
+	if search != "" {
+		searchSql := " and concat (repo, title, sig) like '%{search}%'"
+		rawSql += strings.Replace(searchSql, "{search}", search, -1)
 	}
 	if sort != "updated_at" {
 		sort = "created_at"
@@ -125,6 +123,307 @@ func (c *PullsController) Get() {
 	if err == nil {
 		c.ApiDataReturn(count, page, perPage, pull)
 	}
+}
+
+type PullsSigsController struct {
+	BaseController
+}
+
+func (c *PullsSigsController) Get() {
+	var pull []models.Pull
+	keyWord := c.GetString("keyword", "")
+	o := orm.NewOrm()
+	sql := "select distinct sig from pull where sig != 'Private' order by sig"
+	_, err := o.Raw(sql).QueryRows(&pull)
+	if err != nil {
+		c.ApiJsonReturn("查询sigs错误", 400, err)
+	}
+	res := make([]string, 0)
+	for _, i := range pull {
+		res = append(res, i.Sig)
+	}
+	if keyWord == "" {
+		c.ApiJsonReturn("请求成功", 200, res)
+	} else {
+		res2 := make([]string, 0)
+		for _, j := range res {
+			if strings.Contains(j, keyWord) {
+				res2 = append(res2, strings.ToLower(j))
+			}
+		}
+		c.ApiJsonReturn("请求成功", 200, res2)
+	}
+}
+
+type PullsReposController struct {
+	BaseController
+}
+
+func (c *PullsReposController) Get() {
+	var pull []models.Pull
+	var pull2 []models.Pull
+	page, _ := c.GetInt("page", 1)
+	perPage, _ := c.GetInt("per_page", 10)
+	if perPage > 100 {
+		perPage = 100
+	}
+	offset := perPage * (page - 1)
+	sig := c.GetString("sig", "")
+	keyWord := c.GetString("keyword", "")
+	o := orm.NewOrm()
+	sql := ""
+	if sig == "" {
+		sql = "select distinct repo from pull where sig != 'Private' order by repo"
+	} else {
+		sql = fmt.Sprintf("select distinct repo from pull where sig != 'Private' and sig = '%s' order by repo", sig)
+	}
+	count, err := o.Raw(sql).QueryRows(&pull)
+	if err != nil {
+		c.ApiJsonReturn("查询repos错误", 400, err)
+	}
+	separateSql := sql + fmt.Sprintf(" limit %v offset %v", perPage, offset)
+	_, err = o.Raw(separateSql).QueryRows(&pull2)
+	if err != nil {
+		c.ApiJsonReturn("分页查询repos错误", 400, err)
+	}
+	res := make([]string, 0)
+	for _, i := range pull2 {
+		res = append(res, i.Repo)
+	}
+	if keyWord == "" {
+		c.ApiDataReturn(count, page, perPage, res)
+	} else {
+		newRes := make([]string, 0)
+		for _, j := range pull {
+			if strings.Contains(strings.ToLower(j.Repo), keyWord) {
+				newRes = append(newRes, j.Repo)
+			}
+		}
+		count = int64(len(newRes))
+		finalRes := make([]string, 0)
+		if offset > int(count) {
+			c.ApiDataReturn(count, page, perPage, finalRes)
+		}
+		if int(count) > offset && int(count) < perPage+offset {
+			c.ApiDataReturn(count, page, perPage, newRes[offset:])
+		}
+		if int(count) == 0 {
+			c.ApiDataReturn(count, page, perPage, finalRes)
+		}
+		c.ApiDataReturn(count, page, perPage, newRes[offset:offset+perPage])
+	}
+}
+
+type PullsRefsController struct {
+	BaseController
+}
+
+func (c *PullsRefsController) Get() {
+	var pull []models.Pull
+	var pull2 []models.Pull
+	page, _ := c.GetInt("page", 1)
+	perPage, _ := c.GetInt("per_page", 10)
+	if perPage > 100 {
+		perPage = 100
+	}
+	offset := perPage * (page - 1)
+	keyWord := c.GetString("keyword", "")
+	o := orm.NewOrm()
+	sql := "select distinct ref from pull where sig != 'Private' order by ref"
+	count, err := o.Raw(sql).QueryRows(&pull)
+	if err != nil {
+		c.ApiJsonReturn("查询refs错误", 400, err)
+	}
+	separateSql := sql + fmt.Sprintf(" limit %v offset %v", perPage, offset)
+	_, err = o.Raw(separateSql).QueryRows(&pull2)
+	if err != nil {
+		c.ApiJsonReturn("分页查询refs错误", 400, err)
+	}
+	res := make([]string, 0)
+	for _, i := range pull2 {
+		res = append(res, i.Ref)
+	}
+	if keyWord == "" {
+		c.ApiDataReturn(count, page, perPage, res)
+	} else {
+		newRes := make([]string, 0)
+		for _, j := range pull {
+			if strings.Contains(strings.ToLower(j.Ref), keyWord) {
+				newRes = append(newRes, j.Ref)
+			}
+		}
+		count = int64(len(newRes))
+		finalRes := make([]string, 0)
+		if offset > int(count) {
+			c.ApiDataReturn(count, page, perPage, finalRes)
+		}
+		if int(count) > offset && int(count) < perPage+offset {
+			c.ApiDataReturn(count, page, perPage, newRes[offset:])
+		}
+		if int(count) == 0 {
+			c.ApiDataReturn(count, page, perPage, finalRes)
+		}
+		c.ApiDataReturn(count, page, perPage, newRes[offset:offset+perPage])
+	}
+}
+
+type PullsAuthorsController struct {
+	BaseController
+}
+
+func (c *PullsAuthorsController) Get() {
+	var pull []models.Pull
+	var pull2 []models.Pull
+	page, _ := c.GetInt("page", 1)
+	perPage, _ := c.GetInt("per_page", 20)
+	keyWord := c.GetString("keyword", "")
+	if perPage > 100 {
+		perPage = 100
+	}
+	offset := perPage * (page - 1)
+	o := orm.NewOrm()
+	sql := "select distinct author from pull where sig != 'Private' order by author"
+	count, err := o.Raw(sql).QueryRows(&pull)
+	if err != nil {
+		c.ApiJsonReturn("查询错误", 400, err)
+	}
+	separateSql := sql + fmt.Sprintf(" limit %v offset %v", perPage, offset)
+	_, err = o.Raw(separateSql).QueryRows(&pull2)
+	if err != nil {
+		c.ApiJsonReturn("分页查询错误", 400, err)
+	}
+	res := make([]string, 0)
+	for _, i := range pull2 {
+		author := i.Author
+		res = append(res, author)
+	}
+	if keyWord == "" {
+		c.ApiDataReturn(count, page, perPage, res)
+	} else {
+		newRes := make([]string, 0)
+		for _, j := range pull {
+			author := j.Author
+			if strings.Contains(author, keyWord) {
+				newRes = append(newRes, author)
+			}
+		}
+		count = int64(len(newRes))
+		finalRes := make([]string, 0)
+		if offset > int(count) {
+			c.ApiDataReturn(count, page, perPage, finalRes)
+		}
+		if int(count) > offset && int(count) < perPage+offset {
+			c.ApiDataReturn(count, page, perPage, newRes[offset:])
+		}
+		if int(count) == 0 {
+			c.ApiDataReturn(count, page, perPage, finalRes)
+		}
+		c.ApiDataReturn(count, page, perPage, newRes[offset:offset+perPage])
+	}
+}
+
+type PullsAssigneesController struct {
+	BaseController
+}
+
+func (c *PullsAssigneesController) Get() {
+	var pull []models.Pull
+	page, _ := c.GetInt("page", 1)
+	perPage, _ := c.GetInt("per_page", 20)
+	keyWord := c.GetString("keyword", "")
+	if perPage > 100 {
+		perPage = 100
+	}
+	offset := perPage * (page - 1)
+	o := orm.NewOrm()
+	sql := "select distinct assignees from pull where sig != 'Private'"
+	_, err := o.Raw(sql).QueryRows(&pull)
+	if err != nil {
+		c.ApiJsonReturn("查询错误", 400, err)
+	}
+	res := make([]string, 0)
+	for _, i := range pull {
+		if i.Assignees == "" {
+			continue
+		}
+		for _, j := range strings.Split(i.Assignees, ",") {
+			if collection.Collect(res).Contains(j) {
+				continue
+			}
+			if keyWord == "" {
+				res = append(res, j)
+			} else {
+				if strings.Contains(strings.ToLower(j), keyWord) {
+					res = append(res, j)
+				}
+			}
+		}
+	}
+	sort.Strings(res)
+	count := int64(len(res))
+	resp := make([]string, 0)
+	if offset > int(count) {
+		c.ApiDataReturn(count, page, perPage, resp)
+	}
+	if int(count) > offset && int(count) < perPage+offset {
+		c.ApiDataReturn(count, page, perPage, res[offset:])
+	}
+	if int(count) == 0 {
+		c.ApiDataReturn(count, page, perPage, resp)
+	}
+	c.ApiDataReturn(count, page, perPage, res[offset:offset+perPage])
+}
+
+type PullsLabelsController struct {
+	BaseController
+}
+
+func (c *PullsLabelsController) Get() {
+	var pull []models.Pull
+	page, _ := c.GetInt("page", 1)
+	perPage, _ := c.GetInt("per_page", 20)
+	keyWord := c.GetString("keyword", "")
+	if perPage > 100 {
+		perPage = 100
+	}
+	offset := perPage * (page - 1)
+	o := orm.NewOrm()
+	sql := "select distinct labels from pull where sig != 'Private'"
+	_, err := o.Raw(sql).QueryRows(&pull)
+	if err != nil {
+		c.ApiJsonReturn("查询错误", 400, err)
+	}
+	res := make([]string, 0)
+	for _, i := range pull {
+		if i.Labels == "" {
+			continue
+		}
+		for _, j := range strings.Split(i.Labels, ",") {
+			if collection.Collect(res).Contains(j) {
+				continue
+			}
+			if keyWord == "" {
+				res = append(res, j)
+			} else {
+				if strings.Contains(strings.ToLower(j), keyWord) {
+					res = append(res, j)
+				}
+			}
+		}
+	}
+	sort.Strings(res)
+	count := int64(len(res))
+	resp := make([]string, 0)
+	if offset > int(count) {
+		c.ApiDataReturn(count, page, perPage, resp)
+	}
+	if int(count) > offset && int(count) < perPage+offset {
+		c.ApiDataReturn(count, page, perPage, res[offset:])
+	}
+	if int(count) == 0 {
+		c.ApiDataReturn(count, page, perPage, resp)
+	}
+	c.ApiDataReturn(count, page, perPage, res[offset:offset+perPage])
 }
 
 func SearchPullRecord(htmlUrl string) bool {

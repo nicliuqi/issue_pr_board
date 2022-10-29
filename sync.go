@@ -65,6 +65,12 @@ func SyncEnterprisePulls() error {
 			createdAt := pull["created_at"].(string)
 			updatedAt := pull["updated_at"].(string)
 			sig := utils.GetSigByRepo(repos, fullName)
+			title := pull["title"].(string)
+			description := pull["body"]
+			if description == nil {
+				description = ""
+			}
+			description = base64.StdEncoding.EncodeToString([]byte(description.(string)))
 			labels := pull["labels"]
 			assignees := pull["assignees"]
 			labelsSlice := make([]string, 0)
@@ -90,17 +96,25 @@ func SyncEnterprisePulls() error {
 			tp.Assignees = strings.Join(assigneesSlice, ",")
 			tp.CreatedAt = utils.FormatTime(createdAt)
 			tp.UpdatedAt = utils.FormatTime(updatedAt)
-			pullExists := controllers.SearchPullRecord(htmlUrl)
-			if pullExists == true {
+			tp.Title = title
+			tp.Description = description.(string)
+			tp.Labels = strings.Join(labelsSlice, ",")
+			if controllers.SearchPullRecord(htmlUrl) {
 				o := orm.NewOrm()
 				qs := o.QueryTable("pull")
 				_, err := qs.Filter("link", tp.Link).Update(orm.Params{
-					"ref":        tp.Ref,
-					"sig":        tp.Sig,
-					"state":      tp.State,
-					"author":     tp.Author,
-					"assignees":  tp.Assignees,
-					"updated_at": tp.UpdatedAt,
+					"org":         tp.Org,
+					"repo":        tp.Repo,
+					"ref":         tp.Ref,
+					"sig":         tp.Sig,
+					"state":       tp.State,
+					"author":      tp.Author,
+					"assignees":   tp.Assignees,
+					"created_at":  tp.CreatedAt,
+					"updated_at":  tp.UpdatedAt,
+					"title":       tp.Title,
+					"description": tp.Description,
+					"labels":      tp.Labels,
 				})
 				if err != nil {
 					logs.Error("Update pull failed, err:", err)
@@ -289,6 +303,7 @@ func SyncEnterpriseRepos() error {
 	if err != nil {
 		return err
 	}
+	logs.Info("Ends of repos sync, wait the next time...")
 	return nil
 }
 

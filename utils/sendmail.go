@@ -33,10 +33,11 @@ func SendCommentAttentionEmail(receiver string, login string, number string, tit
 			"<pre>%v</pre>", link, number, login, login, body)
 	err := sendEmail(receiver, subject, htmlBody)
 	if err != nil {
+		logs.Error(err)
 		return err
 	} else {
 		logs.Info("Send issue comment attention to", receiver)
-		return err
+		return nil
 	}
 }
 
