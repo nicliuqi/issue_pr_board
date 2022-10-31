@@ -40,7 +40,7 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 	author := q.Author
 	label := q.Label
 	search := q.Search
-	sort := q.Sort
+	order := q.Sort
 	direction := q.Direction
 	page := q.Page
 	perPage := q.PerPage
@@ -84,13 +84,13 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 		searchSql := " and concat (repo, title, sig) like '%{search}%'"
 		rawSql += strings.Replace(searchSql, "{search}", search, -1)
 	}
-	if sort != "updated_at" {
-		sort = "created_at"
+	if order != "updated_at" {
+		order = "created_at"
 	}
 	if direction == "asc" {
-		rawSql += fmt.Sprintf(" order by %s asc", sort)
+		rawSql += fmt.Sprintf(" order by %s asc", order)
 	} else {
-		rawSql += fmt.Sprintf(" order by %s desc", sort)
+		rawSql += fmt.Sprintf(" order by %s desc", order)
 	}
 	var pull []models.Pull
 	o := orm.NewOrm()
@@ -149,8 +149,8 @@ func (c *PullsSigsController) Get() {
 	} else {
 		res2 := make([]string, 0)
 		for _, j := range res {
-			if strings.Contains(j, keyWord) {
-				res2 = append(res2, strings.ToLower(j))
+			if strings.Contains(strings.ToLower(j), strings.ToLower(keyWord)) {
+				res2 = append(res2, j)
 			}
 		}
 		c.ApiJsonReturn("请求成功", 200, res2)
@@ -197,7 +197,7 @@ func (c *PullsReposController) Get() {
 	} else {
 		newRes := make([]string, 0)
 		for _, j := range pull {
-			if strings.Contains(strings.ToLower(j.Repo), keyWord) {
+			if strings.Contains(strings.ToLower(j.Repo), strings.ToLower(keyWord)) {
 				newRes = append(newRes, j.Repo)
 			}
 		}
@@ -250,7 +250,7 @@ func (c *PullsRefsController) Get() {
 	} else {
 		newRes := make([]string, 0)
 		for _, j := range pull {
-			if strings.Contains(strings.ToLower(j.Ref), keyWord) {
+			if strings.Contains(strings.ToLower(j.Ref), strings.ToLower(keyWord)) {
 				newRes = append(newRes, j.Ref)
 			}
 		}
@@ -305,7 +305,7 @@ func (c *PullsAuthorsController) Get() {
 		newRes := make([]string, 0)
 		for _, j := range pull {
 			author := j.Author
-			if strings.Contains(author, keyWord) {
+			if strings.Contains(strings.ToLower(author), strings.ToLower(keyWord)) {
 				newRes = append(newRes, author)
 			}
 		}
@@ -355,7 +355,7 @@ func (c *PullsAssigneesController) Get() {
 			if keyWord == "" {
 				res = append(res, j)
 			} else {
-				if strings.Contains(strings.ToLower(j), keyWord) {
+				if strings.Contains(strings.ToLower(j), strings.ToLower(keyWord)) {
 					res = append(res, j)
 				}
 			}
@@ -407,7 +407,7 @@ func (c *PullsLabelsController) Get() {
 			if keyWord == "" {
 				res = append(res, j)
 			} else {
-				if strings.Contains(strings.ToLower(j), keyWord) {
+				if strings.Contains(strings.ToLower(j), strings.ToLower(keyWord)) {
 					res = append(res, j)
 				}
 			}

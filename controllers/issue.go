@@ -293,7 +293,7 @@ func (c *AuthorsController) Get() {
 			if strings.Contains(author, "@") {
 				author = strings.Split(author, "@")[0] + "@***" + author[len(author)-1:]
 			}
-			if strings.Contains(author, keyWord) {
+			if strings.Contains(strings.ToLower(author), strings.ToLower(keyWord)) {
 				newRes = append(newRes, author)
 			}
 		}
@@ -346,7 +346,7 @@ func (c *AssigneesController) Get() {
 		} else {
 			newRes := make([]string, 0)
 			for _, j := range issue {
-				if strings.Contains(j.Assignee, keyWord) {
+				if strings.Contains(strings.ToLower(j.Assignee), strings.ToLower(keyWord)) {
 					newRes = append(newRes, j.Assignee)
 				}
 			}
@@ -402,7 +402,7 @@ func (c *BranchesController) Get() {
 		} else {
 			newRes := make([]string, 0)
 			for _, j := range issue {
-				if strings.Contains(j.Branch, keyWord) {
+				if strings.Contains(strings.ToLower(j.Branch), strings.ToLower(keyWord)) {
 					newRes = append(newRes, j.Branch)
 				}
 			}
@@ -446,7 +446,7 @@ func (c *LabelsController) Get() {
 				if keyWord == "" {
 					res = append(res, j)
 				} else {
-					if strings.Contains(j, keyWord) {
+					if strings.Contains(strings.ToLower(j), strings.ToLower(keyWord)) {
 						res = append(res, j)
 					}
 				}
