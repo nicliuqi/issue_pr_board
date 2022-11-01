@@ -33,6 +33,7 @@ type QueryIssueParam struct {
 	Assignee   string
 	Branch     string
 	Label      string
+	Exclusion  string
 	IssueState string
 	IssueType  string
 	Priority   string
@@ -54,6 +55,7 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 	assignee := q.Assignee
 	branch := q.Branch
 	label := q.Label
+	exclusion := q.Exclusion
 	issueState := q.IssueState
 	issueType := q.IssueType
 	priority := q.Priority
@@ -108,7 +110,13 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 	if label != "" {
 		label = strings.Replace(label, "，", ",", -1)
 		for _, labelStr := range strings.Split(label, ",") {
-			rawSql += fmt.Sprintf(" and instr (labels, '%s')", labelStr)
+			rawSql += fmt.Sprintf(" and find_in_set('%s', labels)", labelStr)
+		}
+	}
+	if exclusion != "" {
+		exclusion = strings.Replace(exclusion, "，", ",", -1)
+		for _, exclusionStr := range strings.Split(exclusion, ",") {
+			rawSql += fmt.Sprintf(" and !find_in_set('%s', labels)", exclusionStr)
 		}
 	}
 	if issueType != "" {
@@ -154,6 +162,7 @@ func (c *IssuesController) Get() {
 		Assignee:   c.GetString("assignee", ""),
 		Branch:     c.GetString("branch", ""),
 		Label:      c.GetString("label", ""),
+		Exclusion:  c.GetString("exclusion", ""),
 		IssueState: c.GetString("issue_state", ""),
 		IssueType:  c.GetString("issue_type", ""),
 		Priority:   c.GetString("priority", ""),
