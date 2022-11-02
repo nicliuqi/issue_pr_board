@@ -22,6 +22,7 @@ type QueryPullParam struct {
 	Author    string
 	Assignee  string
 	Label     string
+	Exclusion string
 	Search    string
 	Sort      string
 	Direction string
@@ -39,6 +40,7 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 	assignee := q.Assignee
 	author := q.Author
 	label := q.Label
+	exclusion := q.Exclusion
 	search := q.Search
 	order := q.Sort
 	direction := q.Direction
@@ -72,12 +74,18 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 		rawSql += fmt.Sprintf(" and author='%s'", author)
 	}
 	if assignee != "" {
-		rawSql += fmt.Sprintf(" and instr (assignees, '%s')", assignee)
+		rawSql += fmt.Sprintf(" and find_in_set('%s', assignees)", assignee)
 	}
 	if label != "" {
 		label = strings.Replace(label, "，", ",", -1)
 		for _, labelStr := range strings.Split(label, ",") {
-			rawSql += fmt.Sprintf(" and instr (labels, '%s')", labelStr)
+			rawSql += fmt.Sprintf(" and find_in_set('%s', labels)", labelStr)
+		}
+	}
+	if exclusion != "" {
+		exclusion = strings.Replace(exclusion, "，", ",", -1)
+		for _, exclusionStr := range strings.Split(exclusion, ",") {
+			rawSql += fmt.Sprintf(" and !find_in_set('%s', labels)", exclusionStr)
 		}
 	}
 	if search != "" {
@@ -115,6 +123,7 @@ func (c *PullsController) Get() {
 		Sort:      c.GetString("sort", ""),
 		Direction: c.GetString("direction", ""),
 		Label:     c.GetString("label", ""),
+		Exclusion: c.GetString("exclusion", ""),
 		Search:    c.GetString("search", ""),
 		Page:      page,
 		PerPage:   perPage,
