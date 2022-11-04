@@ -100,12 +100,13 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 	} else {
 		rawSql += fmt.Sprintf(" order by %s desc", order)
 	}
-	var pull []models.Pull
 	o := orm.NewOrm()
-	count, _ := o.Raw(rawSql).QueryRows(&pull)
+	countSql := strings.Replace(rawSql, "*", "count(*)", -1)
+	var sqlCount int
+	_ = o.Raw(countSql).QueryRow(&sqlCount)
 	offset := perPage * (page - 1)
 	rawSql += fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	return count, rawSql
+	return int64(sqlCount), rawSql
 }
 
 func (c *PullsController) Get() {
