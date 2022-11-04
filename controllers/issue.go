@@ -137,15 +137,16 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 	} else {
 		rawSql += fmt.Sprintf(" order by %s desc", sort)
 	}
-	var issue []models.Issue
 	o := orm.NewOrm()
-	count, _ := o.Raw(rawSql).QueryRows(&issue)
+	countSql := strings.Replace(rawSql, "*", "count(*)", -1)
+	var sqlCount int
+	_ = o.Raw(countSql).QueryRow(&sqlCount)
 	if perPage >= 100 {
 		perPage = 100
 	}
 	offset := perPage * (page - 1)
 	rawSql += fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	return count, rawSql
+	return int64(sqlCount), rawSql
 }
 
 func (c *IssuesController) Get() {

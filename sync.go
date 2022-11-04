@@ -77,6 +77,27 @@ func SyncEnterprisePulls() error {
 			assigneesSlice := make([]string, 0)
 			if labels != nil {
 				for _, label := range labels.([]interface{}) {
+					var lb models.Label
+					lb.Name = label.(map[string]interface{})["name"].(string)
+					lb.Color = label.(map[string]interface{})["color"].(string)
+					lb.UniqueId = label.(map[string]interface{})["id"].(float64)
+					if models.SearchLabel(lb.Name) {
+						o := orm.NewOrm()
+						qs := o.QueryTable("label")
+						_, err = qs.Filter("name", lb.Name).Update(orm.Params{
+							"color":     lb.Color,
+							"unique_id": lb.UniqueId,
+						})
+						if err != nil {
+							logs.Error("Update label failed, err:", err)
+						}
+					} else {
+						o := orm.NewOrm()
+						_, err = o.Insert(&lb)
+						if err != nil {
+							logs.Error("Insert label failed, err:", err)
+						}
+					}
 					labelsSlice = append(labelsSlice, label.(map[string]interface{})["name"].(string))
 				}
 			}
@@ -206,6 +227,27 @@ func SyncEnterpriseIssues() error {
 			tags := make([]string, 0)
 			if labels != nil {
 				for _, label := range labels.([]interface{}) {
+					var lb models.Label
+					lb.Name = label.(map[string]interface{})["name"].(string)
+					lb.Color = label.(map[string]interface{})["color"].(string)
+					lb.UniqueId = label.(map[string]interface{})["id"].(float64)
+					if models.SearchLabel(lb.Name) {
+						o := orm.NewOrm()
+						qs := o.QueryTable("label")
+						_, err = qs.Filter("name", lb.Name).Update(orm.Params{
+							"color":     lb.Color,
+							"unique_id": lb.UniqueId,
+						})
+						if err != nil {
+							logs.Error("Update label failed, err:", err)
+						}
+					} else {
+						o := orm.NewOrm()
+						_, err = o.Insert(&lb)
+						if err != nil {
+							logs.Error("Insert label failed, err:", err)
+						}
+					}
 					tags = append(tags, label.(map[string]interface{})["name"].(string))
 				}
 			}
