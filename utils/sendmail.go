@@ -28,8 +28,8 @@ func SendVerifyEmail(receiver string, code string) error {
 func SendCommentAttentionEmail(receiver string, login string, number string, title string, link string, body string) error {
 	subject := fmt.Sprintf("openEuler QuickIssue: #%v %v", number, title)
 	htmlBody := fmt.Sprintf(
-		"<p>You are receiving this because you submitted the issue <a href='%v'>#%v</a>.</p>"+
-			"<p><a href='https://gitee.com/%v'>@%v</a>  said,</p>"+
+		"<p>You are receiving this email because you submitted the issue <a href='%v'>#%v</a>.</p>"+
+			"<p><a href='https://gitee.com/%v'>@%v</a>&nbsp;said:</p>"+
 			"<pre>%v</pre>", link, number, login, login, body)
 	err := sendEmail(receiver, subject, htmlBody)
 	if err != nil {
@@ -37,6 +37,21 @@ func SendCommentAttentionEmail(receiver string, login string, number string, tit
 		return err
 	} else {
 		logs.Info("Send issue comment attention to", receiver)
+		return nil
+	}
+}
+
+func SendStateChangeAttentionEmail(receiver string, issueState string, number string, title string, link string) error {
+	subject := fmt.Sprintf("openEuler QuickIssue: #%v %v", number, title)
+	htmlBody := fmt.Sprintf(
+		"<p>You are receiving this email because you submitted the issue <a href='%v'>#%v</a>.</p>"+
+			"<p>The issue state has been changed to【%v】.</p>", link, number, issueState)
+	err := sendEmail(receiver, subject, htmlBody)
+	if err != nil {
+		logs.Error(err)
+		return err
+	} else {
+		logs.Info("Send issue state change attention to", receiver)
 		return nil
 	}
 }
