@@ -159,20 +159,27 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 		if err != nil {
 			logs.Error("Update issue event failed, err:", err)
 		}
-		if action == "comment" {
-			commenterId := reqBody["author"].(map[string]interface{})["login"].(string)
-			if commenterId == "openeuler-ci-bot" {
-				return
+		var item models.Issue
+		_ = qs.Filter("number", ti.Number).One(&item)
+		if item.Reporter == "" {
+			return
+		} else {
+			if action == "comment" {
+				commenterId := reqBody["author"].(map[string]interface{})["login"].(string)
+				if commenterId == "openeuler-ci-bot" {
+					return
+				}
+				commentBody := reqBody["comment"].(map[string]interface{})["body"].(string)
+				err = utils.SendCommentAttentionEmail(item.Reporter, commenterId, number, title, htmlUrl, commentBody)
+				if err != nil {
+					logs.Error("Fail to send issue comment attention email, err:", err)
+				}
 			}
-			var item models.Issue
-			_ = qs.Filter("number", ti.Number).One(&item)
-			if item.Reporter == "" {
-				return
-			}
-			commentBody := reqBody["comment"].(map[string]interface{})["body"].(string)
-			err = utils.SendCommentAttentionEmail(item.Reporter, commenterId, number, title, htmlUrl, commentBody)
-			if err != nil {
-				logs.Error("Fail to send email, err:", err)
+			if action == "state_change" {
+				err = utils.SendStateChangeAttentionEmail(item.Reporter, issueState, number, title, htmlUrl)
+				if err != nil {
+					logs.Error("Fail to send issue state change attention email, err:", err)
+				}
 			}
 		}
 	} else {
@@ -313,7 +320,9 @@ func (c *HooksController) Post() {
 		return
 	}
 	action := headers["X-Gitee-Event"]
+	logs.Info("Receive a", action)
 	body := c.Ctx.Input.RequestBody
+	logs.Info(collection.Collect(string(body)).ToJson())
 	reqBody := collection.Collect(string(body)).ToMap()
 	switch {
 	case collection.Collect(action).Contains("Issue Hook"):
