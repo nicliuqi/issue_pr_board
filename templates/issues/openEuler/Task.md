@@ -1,0 +1,1 @@
+<!-- # Select an issue type, such as requirement, bug, or CVE from the drop-down list on the left of the Title text box. -->

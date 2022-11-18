@@ -1,0 +1,74 @@
+- name: 任务
+  platforms:
+    - unique_id: 118736
+      platform: gitee
+
+- name: 开源之夏2022
+  platforms:
+    - unique_id: 205654
+      platform: gitee
+
+- name: 需求
+  platforms:
+    - unique_id: 118737
+      platform: gitee
+
+- name: 缺陷
+  platforms:
+    - unique_id: 118738
+      platform: gitee
+
+- name: 版本
+  platforms:
+    - unique_id: 185113
+      platform: gitee
+
+- name: CVE和安全问题
+  platforms:
+    - unique_id: 210726
+      platform: gitee
+
+- name: HDC-任务打榜赛
+  platforms:
+    - unique_id: 375449
+      platform: gitee
+
+- name: 自定义
+  platforms:
+    - unique_id: 382993
+      platform: gitee
+
+- name: 翻译
+  platforms:
+    - unique_id: 423442
+      platform: gitee
+
+- name: 开源实习
+  platforms:
+    - unique_id: 455147
+      platform: gitee
+
+- name: 开源软件变更管理
+  platforms:
+    - unique_id: 497568
+      platform: gitee
+
+- name: 软件包引入
+  platforms:
+    - unique_id: 532341
+      platform: gitee
+
+- name: 有奖捉虫
+  platforms:
+    - unique_id: 546979
+      platform: gitee
+
+- name: Task
+  platforms:
+    - unique_id: 588993
+      platform: gitee
+
+- name: 迁移提优
+  platforms:
+    - unique_id: 715717
+      platform: gitee
