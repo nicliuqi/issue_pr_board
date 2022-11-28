@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/orm"
@@ -488,64 +487,56 @@ type TypesController struct {
 	BaseController
 }
 
-type IssueTypesResponse struct {
-	TotalCount int                 `json:"total_count"`
-	Data       []IssueTypeResponse `json:"data"`
+type QueryIssueTypesParam struct {
+	Name         string
+	Platform     string
+	Organization string
 }
 
-type IssueTypeResponse struct {
-	Id    int    `json:"id"`
-	Title string `json:"title"`
+func formQueryIssueTypesSql(q QueryIssueTypesParam) string {
+	rawSql := "select * from issue_type"
+	name := q.Name
+	platform := q.Platform
+	organization := q.Organization
+	if name != "" {
+		if len(rawSql) == 24 {
+			rawSql += fmt.Sprintf(" where name='%v'", name)
+		} else {
+			rawSql += fmt.Sprintf(" and name='%v'", name)
+		}
+	}
+	if platform != "" {
+		if len(rawSql) == 24 {
+			rawSql += fmt.Sprintf(" where platform='%v'", platform)
+		} else {
+			rawSql += fmt.Sprintf(" and platform='%v'", platform)
+		}
+	}
+	if organization != "" {
+		if len(rawSql) == 24 {
+			rawSql += fmt.Sprintf(" where organization='%v'", organization)
+		} else {
+			rawSql += fmt.Sprintf(" and organization='%v'", organization)
+		}
+	}
+	return rawSql
 }
 
 func (c *TypesController) Get() {
-	mode := c.GetString("mode", "")
-	if mode == "local" {
-		var issue []models.Issue
-		o := orm.NewOrm()
-		searchSql := "select distinct issue_type from issue"
-		_, err := o.Raw(searchSql).QueryRows(&issue)
-		if err != nil {
-			logs.Error("Fail to search issue types, err:", err)
-		}
-		res := make([]string, 0)
-		for _, i := range issue {
-			res = append(res, i.IssueType)
-		}
-		c.ApiJsonReturn("请求成功", 200, res)
+	var issueTypes []models.IssueType
+	qp := QueryIssueTypesParam{
+		Name:         c.GetString("name", ""),
+		Platform:     c.GetString("platform", ""),
+		Organization: c.GetString("organization", ""),
 	}
-	token := models.GetV8Token(3)
-	enterpriseId := os.Getenv("EnterpriseId")
-	url := fmt.Sprintf("https://api.gitee.com/enterprises/%s/issue_types?page=1&per_page=100&access_token=%s", enterpriseId, token)
-	resp, err := http.Get(url)
+	o := orm.NewOrm()
+	sql := formQueryIssueTypesSql(qp)
+	_, err := o.Raw(sql).QueryRows(&issueTypes)
 	if err != nil {
-		logs.Error("Fail to get enterprise issue types, err:", err)
-		c.ApiJsonReturn("获取任务类型列表失败", 400, err)
+		logs.Error("Fail to query issue types, err:", err)
+		c.ApiJsonReturn("请求失败", 400, err)
 	}
-	if resp.StatusCode != 200 {
-		logs.Error("Get unexpected response when getting enterprise issue types, status:", resp.Status)
-		c.ApiJsonReturn("获取任务类型列表响应未知", resp.StatusCode, resp.Body)
-	}
-	body, _ := ioutil.ReadAll(resp.Body)
-	defer func(Body io.ReadCloser) {
-		err = Body.Close()
-		if err != nil {
-			logs.Error("Fail to close response body of enterprise issue types, err：", err)
-		}
-	}(resp.Body)
-	res := make([]map[string]interface{}, 0)
-	var issuesTypesResponse IssueTypesResponse
-	err = json.Unmarshal(body, &issuesTypesResponse)
-	issuesTypes := issuesTypesResponse.Data
-	for _, issueType := range issuesTypes {
-		id := issueType.Id
-		title := issueType.Title
-		tmpMap := make(map[string]interface{})
-		tmpMap["id"] = id
-		tmpMap["title"] = title
-		res = append(res, tmpMap)
-	}
-	c.ApiJsonReturn("请求成功", 200, res)
+	c.ApiJsonReturn("请求成功", 200, issueTypes)
 }
 
 type UploadAttachmentController struct {
@@ -557,7 +548,6 @@ type Attachment struct {
 }
 
 func (c *UploadAttachmentController) Post() {
-	// save attachment
 	tmpDir, _ := os.MkdirTemp("", "")
 	var attachment Attachment
 	err := c.ParseForm(&attachment)
@@ -580,7 +570,6 @@ func (c *UploadAttachmentController) Post() {
 	if err != nil {
 		logs.Error("Fail to save file")
 	}
-	// upload attachment
 	enterpriseId := os.Getenv("EnterpriseId")
 	token := models.GetV8Token(3)
 	url := fmt.Sprintf("https://api.gitee.com/enterprises/%v/attach_files/upload", enterpriseId)
@@ -628,8 +617,6 @@ func (c *UploadAttachmentController) Post() {
 	if err != nil {
 		logs.Error("Fail to read Body of res, err:", err)
 	}
-	logs.Info(string(body))
-	// remove temp file
 	err = os.Remove(tmpPath)
 	if err != nil {
 		logs.Error("Fail to remove temp file, err:", err)

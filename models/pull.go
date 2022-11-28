@@ -42,7 +42,7 @@ func init() {
 		logs.Error("Fail to register database, err:", err)
 		return
 	}
-	orm.RegisterModel(new(Pull), new(Issue), new(Repo), new(Secret), new(Verify), new(Label))
+	orm.RegisterModel(new(Pull), new(Issue), new(Repo), new(Secret), new(Verify), new(Label), new(IssueType))
 	err = orm.RunSyncdb("default", false, true)
 	if err != nil {
 		logs.Error("Fail to sync databases, err:", err)

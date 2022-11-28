@@ -320,9 +320,7 @@ func (c *HooksController) Post() {
 		return
 	}
 	action := headers["X-Gitee-Event"]
-	logs.Info("Receive a", action)
 	body := c.Ctx.Input.RequestBody
-	logs.Info(collection.Collect(string(body)).ToJson())
 	reqBody := collection.Collect(string(body)).ToMap()
 	switch {
 	case collection.Collect(action).Contains("Issue Hook"):

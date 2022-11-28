@@ -27,5 +27,6 @@ func main() {
 	toolbox.AddTask("cleanVerification", tk5)
 	toolbox.StartTask()
 	defer toolbox.StopTask()
+	go models.InitIssueType()
 	beego.Run()
 }
