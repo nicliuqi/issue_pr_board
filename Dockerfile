@@ -5,6 +5,7 @@ RUN cd /go/src/github.com/opensourceways/issue_pr_board && go mod tidy && CGO_EN
 
 FROM openeuler/go:1.17.3-22.03-lts
 COPY ./conf /opt/app/conf
+COPY ./templates /opt/app/templates
 COPY --from=BUILDER /go/src/github.com/opensourceways/issue_pr_board/ipb /opt/app
 WORKDIR /opt/app/
 ENTRYPOINT ["/opt/app/ipb"]
