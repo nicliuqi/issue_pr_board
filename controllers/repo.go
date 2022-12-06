@@ -7,6 +7,7 @@ import (
 	"github.com/astaxie/beego/orm"
 	"io/ioutil"
 	"issue_pr_board/models"
+	"issue_pr_board/utils"
 	"net/http"
 	"os"
 	"strings"
@@ -90,27 +91,19 @@ func SearchRepo(name string) bool {
 	return true
 }
 
-type ReposResponse struct {
-	TotalCount int            `json:"total_count"`
-	Repos      []RepoResponse `json:"data"`
-}
-
 type RepoResponse struct {
-	Id                int    `json:"id"`
-	PathWithNamespace string `json:"path_with_namespace"`
+	Id        int    `json:"id"`
+	FullName  string `json:"full_name"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 func SyncRepoNumber() error {
 	logs.Info("Starting to sync repos numbers...")
-	token := models.GetV8Token(3)
-	if token == "" {
-		logs.Warn("Cannot get a valid V8 access token")
-		return nil
-	}
-	enterpriseId := os.Getenv("EnterpriseId")
 	page := 1
 	for {
-		url := fmt.Sprintf("https://api.gitee.com/enterprises/%s/projects?page=%d&per_page=100&access_token=%s", enterpriseId, page, token)
+		logs.Info("Sync repos: Page", page)
+		url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/repos?type=all&page=%v&per_page=100&access_token=%v", page, os.Getenv("AccessToken"))
 		resp, err := http.Get(url)
 		if err != nil {
 			logs.Error("Fail to get enterprise pull requests, err：", err)
@@ -129,29 +122,37 @@ func SyncRepoNumber() error {
 		if len(string(body)) == 2 {
 			break
 		}
-		var reposResponse ReposResponse
-		err = json.Unmarshal(body, &reposResponse)
+		var repos []RepoResponse
+		err = json.Unmarshal(body, &repos)
 		if err != nil {
+			logs.Error(err)
 			return nil
 		}
-		repos := reposResponse.Repos
 		if len(repos) == 0 {
 			break
 		}
 		for _, repo := range repos {
 			var r models.Repo
-			name := repo.PathWithNamespace
+			name := repo.FullName
 			number := repo.Id
+			createdAt := repo.CreatedAt
+			updatedAt := repo.UpdatedAt
 			r.Name = name
 			r.EnterpriseNumber = number
+			r.CreatedAt = utils.FormatTime(createdAt)
+			r.UpdatedAt = utils.FormatTime(updatedAt)
 			if SearchRepo(name) {
 				o := orm.NewOrm()
 				qs := o.QueryTable("repo")
 				_, err := qs.Filter("name", name).Update(orm.Params{
 					"enterprise_number": number,
+					"created_at":        r.CreatedAt,
+					"updated_at":        r.UpdatedAt,
 				})
 				if err != nil {
 					logs.Error("Update repo enterprise number failed, err:", err)
+				} else {
+					logs.Info("更新仓库", name)
 				}
 			}
 		}
