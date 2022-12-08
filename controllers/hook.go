@@ -236,6 +236,8 @@ func HandlePullEvent(reqBody map[string]interface{}) {
 	description = base64.StdEncoding.EncodeToString([]byte(description.(string)))
 	labels := pull["labels"]
 	assignees := pull["assignees"]
+	draft := pull["draft"]
+	mergeable := pull["mergeable"]
 	labelsSlice := make([]string, 0)
 	assigneesSlice := make([]string, 0)
 	if labels != nil {
@@ -283,6 +285,8 @@ func HandlePullEvent(reqBody map[string]interface{}) {
 	tp.Title = title
 	tp.Description = description.(string)
 	tp.Labels = strings.Join(labelsSlice, ",")
+	tp.Draft = draft.(bool)
+	tp.Mergeable = mergeable.(bool)
 	if SearchPullRecord(htmlUrl) {
 		o := orm.NewOrm()
 		qs := o.QueryTable("pull")
@@ -299,6 +303,8 @@ func HandlePullEvent(reqBody map[string]interface{}) {
 			"title":       tp.Title,
 			"description": tp.Description,
 			"labels":      tp.Labels,
+			"draft":       tp.Draft,
+			"mergeable":   tp.Mergeable,
 		})
 		if err != nil {
 			logs.Error("Update pull event failed, err:", err)

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/orm"
@@ -10,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 )
 
 type Secret struct {
@@ -109,24 +109,27 @@ func SyncSecret() error {
 	return nil
 }
 
-func GetV8Token(retry int) string {
-	var secret Secret
-	o := orm.NewOrm()
-	searchSql := "select * from secret where id=1"
-	err := o.Raw(searchSql).QueryRow(&secret)
+type V8Token struct {
+	AccessToken string `json:"access_token"`
+}
+
+func GetV8Token() string {
+	url := fmt.Sprintf("%v?token=%v", os.Getenv("V8URL"), os.Getenv("QUERY_TOKEN"))
+	resp, err := http.Get(url)
 	if err != nil {
-		logs.Error("Fail to search secret, err:", err)
+		logs.Error("Fail to get v8 token, err：", err)
 		return ""
 	}
-	token := secret.Token
-	state := secret.State
-	if state != "normal" {
-		if retry == 0 {
-			return ""
-		}
-		time.Sleep(1)
-		retry -= 1
-		GetV8Token(retry)
+	if resp.StatusCode != 200 {
+		logs.Error("Get unexpected response when getting v8 token, status:", resp.Status)
+		return ""
 	}
-	return token
+	body, _ := ioutil.ReadAll(resp.Body)
+	err = resp.Body.Close()
+	if err != nil {
+		logs.Error("Fail to close response body of the issue, err:", err)
+	}
+	var token V8Token
+	err = json.Unmarshal(body, &token)
+	return token.AccessToken
 }

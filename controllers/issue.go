@@ -206,7 +206,7 @@ func (c *IssuesController) Post() {
 		c.ApiJsonReturn("验证码错误", 400, "")
 	}
 	payloadMap := make(map[string]interface{})
-	payloadMap["access_token"] = models.GetV8Token(3)
+	payloadMap["access_token"] = models.GetV8Token()
 	payloadMap["project_id"] = reqBody["project_id"]
 	payloadMap["title"] = reqBody["title"]
 	payloadMap["description"] = reqBody["description"]
@@ -571,7 +571,7 @@ func (c *UploadAttachmentController) Post() {
 		logs.Error("Fail to save file")
 	}
 	enterpriseId := os.Getenv("EnterpriseId")
-	token := models.GetV8Token(3)
+	token := models.GetV8Token()
 	url := fmt.Sprintf("https://api.gitee.com/enterprises/%v/attach_files/upload", enterpriseId)
 	payload := &bytes.Buffer{}
 	writer := multipart.NewWriter(payload)
@@ -662,7 +662,7 @@ func (c *UploadImageController) Post() {
 	payloadMap := make(map[string]interface{})
 	payloadMap["base64"] = fmt.Sprintf("data:image/png;base64,%s", encodedString)
 	payload := strings.NewReader(collection.Collect(payloadMap).ToJson())
-	token := models.GetV8Token(3)
+	token := models.GetV8Token()
 	if token == "" {
 		logs.Warn("Cannot get a valid V8 access token")
 		c.ApiJsonReturn("认证失败", 401, "")
