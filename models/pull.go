@@ -27,6 +27,8 @@ type Pull struct {
 	Title       string `json:"title" orm:"type(text);null" description:"标题"`
 	Description string `json:"-" orm:"type(text);null" description:"描述"`
 	Labels      string `json:"labels" orm:"type(text);null" description:"标签"`
+	Draft       bool   `json:"draft" orm:"null" description:"是否是草稿"`
+	Mergeable   bool   `json:"mergeable" orm:"null" description:"是否可合入"`
 }
 
 func init() {
