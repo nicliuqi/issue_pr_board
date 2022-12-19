@@ -20,4 +20,5 @@ type Issue struct {
 	Priority    string `json:"priority" orm:"size(10);null" description:"优先级"`
 	Labels      string `json:"labels" orm:"type(text);null" description:"标签"`
 	Branch      string `json:"branch" orm:"size(100);null" description:"指定分支"`
+	Milestone   string `json:"milestone" orm:"size(255);null" description:"里程碑"`
 }

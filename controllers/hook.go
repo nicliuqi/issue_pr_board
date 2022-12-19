@@ -71,6 +71,11 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 	createdAt := issue["created_at"].(string)
 	updatedAt := issue["updated_at"].(string)
 	sig := utils.GetSigByRepo(repos, fullName)
+	ms := issue["milestone"]
+	milestone := ""
+	if ms != nil {
+		milestone = ms.(map[string]interface{})["title"].(string)
+	}
 	assignee := issue["assignee"]
 	assigneeLogin := ""
 	if assignee != nil {
@@ -134,6 +139,7 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 	ti.Priority = priority
 	ti.Labels = strings.Join(tags, ",")
 	ti.Branch = branch.(string)
+	ti.Milestone = milestone
 	issueExists := SearchIssueRecord(number)
 	if issueExists == true {
 		o := orm.NewOrm()
@@ -155,6 +161,7 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 			"priority":    ti.Priority,
 			"labels":      ti.Labels,
 			"branch":      ti.Branch,
+			"milestone":   ti.Milestone,
 		})
 		if err != nil {
 			logs.Error("Update issue event failed, err:", err)

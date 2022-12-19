@@ -212,6 +212,11 @@ func SyncEnterpriseIssues() error {
 			createdAt := issue["created_at"].(string)
 			updatedAt := issue["updated_at"].(string)
 			sig := utils.GetSigByRepo(repos, fullName)
+			ms := issue["milestone"]
+			milestone := ""
+			if ms != nil {
+				milestone = ms.(map[string]interface{})["title"].(string)
+			}
 			assignee := issue["assignee"]
 			assigneeLogin := ""
 			if assignee != nil {
@@ -275,6 +280,7 @@ func SyncEnterpriseIssues() error {
 			ti.Priority = priority
 			ti.Labels = strings.Join(tags, ",")
 			ti.Branch = branch.(string)
+			ti.Milestone = milestone
 			issueExists := controllers.SearchIssueRecord(number)
 			if issueExists == true {
 				o := orm.NewOrm()
@@ -296,6 +302,7 @@ func SyncEnterpriseIssues() error {
 					"priority":    ti.Priority,
 					"labels":      ti.Labels,
 					"branch":      ti.Branch,
+					"milestone":   ti.Milestone,
 				})
 				if err != nil {
 					logs.Error("Update issue failed, err:", err)
