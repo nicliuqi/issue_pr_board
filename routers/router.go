@@ -23,6 +23,7 @@ func init() {
 	beego.Router("/issues/branches", &controllers.BranchesController{})
 	beego.Router("/issues/labels", &controllers.LabelsController{})
 	beego.Router("/issues/types", &controllers.TypesController{})
+	beego.Router("/issues/milestones", &controllers.MilestonesController{})
 	beego.Router("/repos", &controllers.ReposController{})
 	beego.Router("/pulls", &controllers.PullsController{})
 	beego.Router("/pulls/authors", &controllers.PullsAuthorsController{})
