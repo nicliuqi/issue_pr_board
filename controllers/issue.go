@@ -39,6 +39,7 @@ type QueryIssueParam struct {
 	Search     string
 	Sort       string
 	Direction  string
+	Milestone  string
 	Page       int
 	PerPage    int
 }
@@ -61,6 +62,7 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 	search := q.Search
 	sort := q.Sort
 	direction := q.Direction
+	milestone := q.Milestone
 	page := q.Page
 	perPage := q.PerPage
 	if issueState != "" {
@@ -74,6 +76,18 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 			}
 		}
 		rawSql += fmt.Sprintf(" and (%s)", issueStateSql)
+	}
+	if milestone != "" {
+		milestone = strings.Replace(milestone, "，", ",", -1)
+		milestoneSql := ""
+		for index, msStr := range strings.Split(milestone, ",") {
+			if index == 0 {
+				milestoneSql += fmt.Sprintf("milestone='%s'", msStr)
+			} else {
+				milestoneSql += fmt.Sprintf(" or milestone='%s'", msStr)
+			}
+		}
+		rawSql += fmt.Sprintf(" and (%s)", milestoneSql)
 	}
 	if state != "" {
 		rawSql += fmt.Sprintf(" and state='%s'", state)
@@ -169,6 +183,7 @@ func (c *IssuesController) Get() {
 		Sort:       c.GetString("sort", ""),
 		Direction:  c.GetString("direction", ""),
 		Search:     c.GetString("search", ""),
+		Milestone:  c.GetString("milestone", ""),
 		Page:       page,
 		PerPage:    perPage,
 	}
@@ -428,6 +443,57 @@ func (c *BranchesController) Get() {
 			}
 			c.ApiDataReturn(count, page, perPage, newRes[offset:offset+perPage])
 		}
+	}
+}
+
+type MilestonesController struct {
+	BaseController
+}
+
+func (c *MilestonesController) Get() {
+	var issue []models.Issue
+	keyWord := c.GetString("keyword", "")
+	o := orm.NewOrm()
+	var sql string
+	sql = "select distinct milestone from issue order by milestone"
+	_, err := o.Raw(sql).QueryRows(&issue)
+	if err == nil {
+		res := make([]string, 0)
+		for _, i := range issue {
+			if i.Milestone == "" {
+				continue
+			}
+			for _, j := range strings.Split(i.Milestone, ",") {
+				if collection.Collect(res).Contains(j) {
+					continue
+				}
+				if keyWord == "" {
+					res = append(res, j)
+				} else {
+					if strings.Contains(strings.ToLower(j), strings.ToLower(keyWord)) {
+						res = append(res, j)
+					}
+				}
+			}
+		}
+		count := int64(len(res))
+		page, _ := c.GetInt("page", 1)
+		perPage, _ := c.GetInt("per_page", 20)
+		if perPage > 100 {
+			perPage = 100
+		}
+		offset := perPage * (page - 1)
+		resp := make([]string, 0)
+		if offset > int(count) {
+			c.ApiDataReturn(count, page, perPage, resp)
+		}
+		if int(count) > offset && int(count) < perPage+offset {
+			c.ApiDataReturn(count, page, perPage, res[offset:])
+		}
+		if int(count) == 0 {
+			c.ApiDataReturn(count, page, perPage, resp)
+		}
+		c.ApiDataReturn(count, page, perPage, res[offset:offset+perPage])
 	}
 }
 
