@@ -66,7 +66,6 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 	page := q.Page
 	perPage := q.PerPage
 	if issueState != "" {
-		issueState = strings.Replace(issueState, "，", ",", -1)
 		issueStateSql := ""
 		for index, issueStateStr := range strings.Split(issueState, ",") {
 			if index == 0 {
@@ -78,7 +77,6 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 		rawSql += fmt.Sprintf(" and (%s)", issueStateSql)
 	}
 	if milestone != "" {
-		milestone = strings.Replace(milestone, "，", ",", -1)
 		milestoneSql := ""
 		for index, msStr := range strings.Split(milestone, ",") {
 			if index == 0 {
@@ -88,6 +86,42 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 			}
 		}
 		rawSql += fmt.Sprintf(" and (%s)", milestoneSql)
+	}
+	if assignee != "" {
+		assigneeSql := ""
+		for index, asStr := range strings.Split(assignee, ",") {
+			if index == 0 {
+				assigneeSql += fmt.Sprintf("assignee='%s'", asStr)
+			} else {
+				assigneeSql += fmt.Sprintf(" or assignee='%s'", asStr)
+			}
+		}
+		rawSql += fmt.Sprintf(" and (%s)", assigneeSql)
+	}
+	if author != "" {
+		authorSql := ""
+		for index, atStr := range strings.Split(author, ",") {
+			if index == 0 {
+				if strings.Contains(atStr, "@") {
+					newAuthor := strings.Split(atStr, "@")[0]
+					if newAuthor != "" {
+						authorSql += fmt.Sprintf("reporter regexp '^%s'", newAuthor)
+					}
+				} else {
+					authorSql += fmt.Sprintf("author='%s'", atStr)
+				}
+			} else {
+				if strings.Contains(atStr, "@") {
+					newAuthor := strings.Split(atStr, "@")[0]
+					if newAuthor != "" {
+						authorSql += fmt.Sprintf(" or reporter regexp '^%s'", newAuthor)
+					}
+				} else {
+					authorSql += fmt.Sprintf(" or author='%s'", atStr)
+				}
+			}
+		}
+		rawSql += fmt.Sprintf(" and (%s)", authorSql)
 	}
 	if state != "" {
 		rawSql += fmt.Sprintf(" and state='%s'", state)
@@ -103,19 +137,6 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 	}
 	if number != "" {
 		rawSql += fmt.Sprintf(" and number='%s'", number)
-	}
-	if author != "" {
-		if strings.Contains(author, "@") {
-			newAuthor := strings.Split(author, "@")[0]
-			if newAuthor != "" {
-				rawSql += fmt.Sprintf(" and reporter regexp '^%s'", newAuthor)
-			}
-		} else {
-			rawSql += fmt.Sprintf(" and author='%s'", author)
-		}
-	}
-	if assignee != "" {
-		rawSql += fmt.Sprintf(" and assignee='%s'", assignee)
 	}
 	if branch != "" {
 		rawSql += fmt.Sprintf(" and branch='%s'", branch)

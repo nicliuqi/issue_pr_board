@@ -47,7 +47,6 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 	page := q.Page
 	perPage := q.PerPage
 	if state != "" {
-		state = strings.Replace(state, "，", ",", -1)
 		stateSql := ""
 		for index, stateStr := range strings.Split(state, ",") {
 			if index == 0 {
@@ -57,6 +56,28 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 			}
 		}
 		rawSql += fmt.Sprintf(" and (%s)", stateSql)
+	}
+	if author != "" {
+		authorSql := ""
+		for index, atStr := range strings.Split(author, ",") {
+			if index == 0 {
+				authorSql += fmt.Sprintf("author='%s'", atStr)
+			} else {
+				authorSql += fmt.Sprintf(" or author='%s'", atStr)
+			}
+		}
+		rawSql += fmt.Sprintf(" and (%s)", authorSql)
+	}
+	if assignee != "" {
+		assigneeSql := ""
+		for index, asStr := range strings.Split(assignee, ",") {
+			if index == 0 {
+				assigneeSql += fmt.Sprintf("find_in_set('%s', assignees)", asStr)
+			} else {
+				assigneeSql += fmt.Sprintf(" or find_in_set('%s', assignees)", asStr)
+			}
+		}
+		rawSql += fmt.Sprintf(" and (%s)", assigneeSql)
 	}
 	if org != "" {
 		rawSql += fmt.Sprintf(" and org='%s'", org)
@@ -69,12 +90,6 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 	}
 	if ref != "" {
 		rawSql += fmt.Sprintf(" and ref='%s'", ref)
-	}
-	if author != "" {
-		rawSql += fmt.Sprintf(" and author='%s'", author)
-	}
-	if assignee != "" {
-		rawSql += fmt.Sprintf(" and find_in_set('%s', assignees)", assignee)
 	}
 	if label != "" {
 		label = strings.Replace(label, "，", ",", -1)
