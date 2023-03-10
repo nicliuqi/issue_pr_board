@@ -32,6 +32,8 @@ func formQueryRepoSql(q QueryRepoParam) (int64, string) {
 	page := q.Page
 	perPage := q.PerPage
 	direction := q.Direction
+	sig = utils.CheckParams(sig)
+	keyword = utils.CheckParams(keyword)
 	if keyword != "" {
 		if len(rawSql) == 18 {
 			rawSql += fmt.Sprintf(" where instr (name, '%s')", strings.ToLower(keyword))
@@ -78,6 +80,8 @@ func (c *ReposController) Get() {
 	_, err := o.Raw(sql).QueryRows(&repo)
 	if err == nil {
 		c.ApiDataReturn(count, page, perPage, repo)
+	} else {
+		c.ApiJsonReturn("查询错误", 400, err)
 	}
 }
 
