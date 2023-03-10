@@ -84,13 +84,3 @@ func GetSigByRepo(repos map[string]string, repo string) string {
 	}
 	return sig
 }
-
-func CheckParams(param string) string {
-	warningWords := []string{" ", "'", "\"", "<", ">", "=", "&", "\\", "#", ";", "(", ")", "%", "!"}
-        for _, warningWord := range warningWords {
-                if strings.Contains(param, warningWord) {
-                        return ""
-                }
-        }
-        return param
-}

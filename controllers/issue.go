@@ -11,7 +11,6 @@ import (
 	"io"
 	"io/ioutil"
 	"issue_pr_board/models"
-	"issue_pr_board/utils"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -66,21 +65,6 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 	milestone := q.Milestone
 	page := q.Page
 	perPage := q.PerPage
-	org = utils.CheckParams(org)
-	repo = utils.CheckParams(repo)
-	sig = utils.CheckParams(sig)
-	state = utils.CheckParams(state)
-	number = utils.CheckParams(number)
-	author = utils.CheckParams(author)
-	assignee = utils.CheckParams(assignee)
-	branch = utils.CheckParams(branch)
-	label = utils.CheckParams(label)
-	exclusion = utils.CheckParams(exclusion)
-	issueState = utils.CheckParams(issueState)
-	issueType = utils.CheckParams(issueType)
-	priority = utils.CheckParams(priority)
-	search = utils.CheckParams(search)
-	milestone = utils.CheckParams(milestone)
 	if issueState != "" {
 		issueStateSql := ""
 		for index, issueStateStr := range strings.Split(issueState, ",") {
@@ -242,8 +226,6 @@ func (c *IssuesController) Get() {
 			res = append(res, i)
 		}
 		c.ApiDataReturn(count, page, perPage, res)
-	} else {
-		c.ApiJsonReturn("查询错误", 400, err)
 	}
 }
 
@@ -324,7 +306,6 @@ func (c *AuthorsController) Get() {
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
-	keyWord = utils.CheckParams(keyWord)
 	if perPage > 100 {
 		perPage = 100
 	}
@@ -386,7 +367,6 @@ func (c *AssigneesController) Get() {
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
-	keyWord = utils.CheckParams(keyWord)
 	if perPage > 100 {
 		perPage = 100
 	}
@@ -441,7 +421,6 @@ func (c *BranchesController) Get() {
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
-	keyWord = utils.CheckParams(keyWord)
 	if perPage > 100 {
 		perPage = 100
 	}
@@ -495,7 +474,6 @@ type MilestonesController struct {
 func (c *MilestonesController) Get() {
 	var issue []models.Issue
 	keyWord := c.GetString("keyword", "")
-	keyWord = utils.CheckParams(keyWord)
 	o := orm.NewOrm()
 	var sql string
 	sql = "select distinct milestone from issue order by milestone"
@@ -547,7 +525,6 @@ type LabelsController struct {
 func (c *LabelsController) Get() {
 	var issue []models.Issue
 	keyWord := c.GetString("keyword", "")
-	keyWord = utils.CheckParams(keyWord)
 	o := orm.NewOrm()
 	var sql string
 	sql = "select distinct labels from issue order by labels"
@@ -608,9 +585,6 @@ func formQueryIssueTypesSql(q QueryIssueTypesParam) string {
 	name := q.Name
 	platform := q.Platform
 	organization := q.Organization
-	name = utils.CheckParams(name)
-	platform = utils.CheckParams(platform)
-	organization = utils.CheckParams(organization)
 	if name != "" {
 		if len(rawSql) == 24 {
 			rawSql += fmt.Sprintf(" where name='%v'", name)

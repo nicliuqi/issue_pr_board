@@ -5,7 +5,6 @@ import (
 	"github.com/astaxie/beego/orm"
 	"github.com/chenhg5/collection"
 	"issue_pr_board/models"
-	"issue_pr_board/utils"
 	"sort"
 	"strings"
 )
@@ -47,16 +46,6 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 	direction := q.Direction
 	page := q.Page
 	perPage := q.PerPage
-	org = utils.CheckParams(org)
-	repo = utils.CheckParams(repo)
-	sig = utils.CheckParams(sig)
-	state = utils.CheckParams(state)
-	ref = utils.CheckParams(ref)
-	assignee = utils.CheckParams(assignee)
-	author = utils.CheckParams(author)
-	label = utils.CheckParams(label)
-	exclusion = utils.CheckParams(exclusion)
-	search = utils.CheckParams(search)
 	if state != "" {
 		stateSql := ""
 		for index, stateStr := range strings.Split(state, ",") {
@@ -160,8 +149,6 @@ func (c *PullsController) Get() {
 	_, err := o.Raw(sql).QueryRows(&pull)
 	if err == nil {
 		c.ApiDataReturn(count, page, perPage, pull)
-	} else {
-		c.ApiJsonReturn("查询错误", 400, err)
 	}
 }
 
@@ -172,7 +159,6 @@ type PullsSigsController struct {
 func (c *PullsSigsController) Get() {
 	var pull []models.Pull
 	keyWord := c.GetString("keyword", "")
-	keyWord = utils.CheckParams(keyWord)
 	o := orm.NewOrm()
 	sql := "select distinct sig from pull where sig != 'Private' order by sig"
 	_, err := o.Raw(sql).QueryRows(&pull)
@@ -211,8 +197,6 @@ func (c *PullsReposController) Get() {
 	offset := perPage * (page - 1)
 	sig := c.GetString("sig", "")
 	keyWord := c.GetString("keyword", "")
-	sig = utils.CheckParams(sig)
-	keyWord = utils.CheckParams(keyWord)
 	o := orm.NewOrm()
 	sql := ""
 	if sig == "" {
@@ -271,7 +255,6 @@ func (c *PullsRefsController) Get() {
 	}
 	offset := perPage * (page - 1)
 	keyWord := c.GetString("keyword", "")
-	keyWord = utils.CheckParams(keyWord)
 	o := orm.NewOrm()
 	sql := "select distinct ref from pull where sig != 'Private' order by ref"
 	count, err := o.Raw(sql).QueryRows(&pull)
@@ -321,7 +304,6 @@ func (c *PullsAuthorsController) Get() {
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
-	keyWord = utils.CheckParams(keyWord)
 	if perPage > 100 {
 		perPage = 100
 	}
@@ -376,7 +358,6 @@ func (c *PullsAssigneesController) Get() {
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
-	keyWord = utils.CheckParams(keyWord)
 	if perPage > 100 {
 		perPage = 100
 	}
@@ -429,7 +410,6 @@ func (c *PullsLabelsController) Get() {
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
-	keyWord = utils.CheckParams(keyWord)
 	if perPage > 100 {
 		perPage = 100
 	}
