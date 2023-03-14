@@ -247,7 +247,11 @@ func (c *IssuesController) Get() {
 	}
 }
 
-func (c *IssuesController) Post() {
+type IssueNewController struct {
+	BaseController
+}
+
+func (c *IssueNewController) Post() {
 	logs.Info("Receive a request of creating an issue")
 	body := c.Ctx.Input.RequestBody
 	if body == nil {

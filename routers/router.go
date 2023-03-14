@@ -18,6 +18,7 @@ func init() {
 	beego.Router("/hooks", &controllers.HooksController{})
 	beego.Router("/image", &controllers.UploadImageController{})
 	beego.Router("/issues", &controllers.IssuesController{})
+	beego.Router("/new-issue", &controllers.IssueNewController{})
 	beego.Router("/issues/assignees", &controllers.AssigneesController{})
 	beego.Router("/issues/authors", &controllers.AuthorsController{})
 	beego.Router("/issues/branches", &controllers.BranchesController{})
