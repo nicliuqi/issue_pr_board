@@ -23,6 +23,8 @@ type QueryRepoParam struct {
 	Page      int
 	PerPage   int
 	Direction string
+	Public    string
+	Status    string
 }
 
 func formQueryRepoSql(q QueryRepoParam) (int64, string) {
@@ -32,8 +34,12 @@ func formQueryRepoSql(q QueryRepoParam) (int64, string) {
 	page := q.Page
 	perPage := q.PerPage
 	direction := q.Direction
+	public := q.Public
+	status := q.Status
 	sig = utils.CheckParams(sig)
 	keyword = utils.CheckParams(keyword)
+	public = utils.CheckParams(public)
+	status = utils.CheckParams(status)
 	if keyword != "" {
 		if len(rawSql) == 18 {
 			rawSql += fmt.Sprintf(" where instr (name, '%s')", strings.ToLower(keyword))
@@ -48,6 +54,34 @@ func formQueryRepoSql(q QueryRepoParam) (int64, string) {
 			rawSql += fmt.Sprintf(" and sig='%s'", sig)
 		}
 	}
+        if public != "" {
+                if len(rawSql) == 18 {
+                        if public == "true" {
+                                rawSql += fmt.Sprintf(" where public=true")
+                        }
+                        if public == "false" {
+                                rawSql += fmt.Sprintf(" where public=false")
+                        }
+                } else {
+                        if public == "true" {
+                                rawSql += fmt.Sprintf(" and public=true")
+                        }
+                        if public == "false" {
+                                rawSql += fmt.Sprintf(" and public=false")
+                        }
+                }
+        }
+        if status != "" {
+                if len(rawSql) == 18 {
+                        if status == "开始" || status == "关闭" {
+                                rawSql += fmt.Sprintf(" where status='%s'", status)
+                        }
+                } else {
+                        if status == "开始" || status == "关闭" {
+                                rawSql += fmt.Sprintf(" and status='%s'", status)
+                        }
+                }
+        }
 	if direction != "desc" {
 		rawSql += " order by name"
 	} else {
@@ -74,6 +108,8 @@ func (c *ReposController) Get() {
 		Page:      page,
 		PerPage:   perPage,
 		Direction: c.GetString("direction", ""),
+		Public:    c.GetString("public", ""),
+		Status:    c.GetString("status", ""),
 	}
 	count, sql := formQueryRepoSql(qp)
 	o := orm.NewOrm()
@@ -100,6 +136,8 @@ type RepoResponse struct {
 	FullName  string `json:"full_name"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
+	Public    bool   `json:"public"`
+	Status    string `json:"status"`
 }
 
 func SyncRepoNumber() error {
@@ -141,10 +179,14 @@ func SyncRepoNumber() error {
 			number := repo.Id
 			createdAt := repo.CreatedAt
 			updatedAt := repo.UpdatedAt
+			public := repo.Public
+			status := repo.Status
 			r.Name = name
 			r.EnterpriseNumber = number
 			r.CreatedAt = utils.FormatTime(createdAt)
 			r.UpdatedAt = utils.FormatTime(updatedAt)
+			r.Public = public
+			r.Status = status
 			if SearchRepo(name) {
 				o := orm.NewOrm()
 				qs := o.QueryTable("repo")
@@ -152,6 +194,8 @@ func SyncRepoNumber() error {
 					"enterprise_number": number,
 					"created_at":        r.CreatedAt,
 					"updated_at":        r.UpdatedAt,
+					"public":            r.Public,
+					"status":            r.Status,
 				})
 				if err != nil {
 					logs.Error("Update repo enterprise number failed, err:", err)
