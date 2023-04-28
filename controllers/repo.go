@@ -54,34 +54,34 @@ func formQueryRepoSql(q QueryRepoParam) (int64, string) {
 			rawSql += fmt.Sprintf(" and sig='%s'", sig)
 		}
 	}
-        if public != "" {
-                if len(rawSql) == 18 {
-                        if public == "true" {
-                                rawSql += fmt.Sprintf(" where public=true")
-                        }
-                        if public == "false" {
-                                rawSql += fmt.Sprintf(" where public=false")
-                        }
-                } else {
-                        if public == "true" {
-                                rawSql += fmt.Sprintf(" and public=true")
-                        }
-                        if public == "false" {
-                                rawSql += fmt.Sprintf(" and public=false")
-                        }
-                }
-        }
-        if status != "" {
-                if len(rawSql) == 18 {
-                        if status == "开始" || status == "关闭" {
-                                rawSql += fmt.Sprintf(" where status='%s'", status)
-                        }
-                } else {
-                        if status == "开始" || status == "关闭" {
-                                rawSql += fmt.Sprintf(" and status='%s'", status)
-                        }
-                }
-        }
+	if public != "" {
+		if len(rawSql) == 18 {
+			if public == "true" {
+				rawSql += fmt.Sprintf(" where public=true")
+			}
+			if public == "false" {
+				rawSql += fmt.Sprintf(" where public=false")
+			}
+		} else {
+			if public == "true" {
+				rawSql += fmt.Sprintf(" and public=true")
+			}
+			if public == "false" {
+				rawSql += fmt.Sprintf(" and public=false")
+			}
+		}
+	}
+	if status != "" {
+		if len(rawSql) == 18 {
+			if status == "开始" || status == "关闭" {
+				rawSql += fmt.Sprintf(" where status='%s'", status)
+			}
+		} else {
+			if status == "开始" || status == "关闭" {
+				rawSql += fmt.Sprintf(" and status='%s'", status)
+			}
+		}
+	}
 	if direction != "desc" {
 		rawSql += " order by name"
 	} else {

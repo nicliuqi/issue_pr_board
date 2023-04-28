@@ -3,12 +3,15 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/TestsLing/aj-captcha-go/util"
+	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
 	"github.com/chenhg5/collection"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 func JsonToSlice(str string) []map[string]interface{} {
@@ -87,10 +90,36 @@ func GetSigByRepo(repos map[string]string, repo string) string {
 
 func CheckParams(param string) string {
 	warningWords := []string{" ", "'", "\"", "<", ">", "=", "&", "\\", "#", ";", "(", ")", "%", "!"}
-        for _, warningWord := range warningWords {
-                if strings.Contains(param, warningWord) {
-                        return ""
-                }
-        }
-        return param
+	for _, warningWord := range warningWords {
+		if strings.Contains(param, warningWord) {
+			return ""
+		}
+	}
+	return param
+}
+
+func CheckAuth(authorization string) bool {
+	ts := time.Now().Unix()
+	authJson := util.AesDecrypt(authorization, os.Getenv("AUTH_SECRET"))
+	if authJson == "" {
+		return false
+	}
+	authMap := collection.Collect(authJson).ToMap()
+	secret, ok := authMap["secret"].(string)
+	if !ok {
+		return false
+	}
+	timestamp, ok2 := authMap["timestamp"].(float64)
+	if !ok2 {
+		return false
+	}
+	interval, _ := beego.AppConfig.Int64("verifyinterval")
+	if ts-int64(timestamp) > interval {
+		return false
+	}
+	if secret != os.Getenv("AUTH_SECRET") {
+		return false
+	} else {
+		return true
+	}
 }
