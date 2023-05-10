@@ -252,6 +252,11 @@ type IssueNewController struct {
 }
 
 func (c *IssueNewController) Post() {
+	authorization := c.Ctx.Input.Header("Authorization")
+	authResult := utils.CheckAuth(authorization)
+	if !authResult {
+		c.ApiJsonReturn("访问权限限制", 401, "")
+	}
 	logs.Info("Receive a request of creating an issue")
 	body := c.Ctx.Input.RequestBody
 	if body == nil {
@@ -665,6 +670,11 @@ type Attachment struct {
 }
 
 func (c *UploadAttachmentController) Post() {
+	authorization := c.Ctx.Input.Header("Authorization")
+	authResult := utils.CheckAuth(authorization)
+	if !authResult {
+		c.ApiJsonReturn("访问权限限制", 401, "")
+	}
 	tmpDir, _ := os.MkdirTemp("", "")
 	var attachment Attachment
 	err := c.ParseForm(&attachment)
@@ -749,6 +759,11 @@ type UploadImageController struct {
 }
 
 func (c *UploadImageController) Post() {
+	authorization := c.Ctx.Input.Header("Authorization")
+	authResult := utils.CheckAuth(authorization)
+	if !authResult {
+		c.ApiJsonReturn("访问权限限制", 401, "")
+	}
 	logs.Info("Ready to upload a image")
 	file, _, err := c.GetFile("file")
 	defer func(file multipart.File) {

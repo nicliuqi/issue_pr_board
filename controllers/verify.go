@@ -56,6 +56,11 @@ func searchEmailRecord(addr string) bool {
 }
 
 func (c *VerifyController) Post() {
+	authorization := c.Ctx.Input.Header("Authorization")
+	authResult := utils.CheckAuth(authorization)
+	if !authResult {
+		c.ApiJsonReturn("访问权限限制", 401, "")
+	}
 	body := c.Ctx.Input.RequestBody
 	if body == nil {
 		return
