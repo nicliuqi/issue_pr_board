@@ -4,7 +4,7 @@
 This service applies two ways (scheduled task and triggered by Gitee Webhook) to synchronize the status of PR and Issue in the openEuler community, 
 and provides the REST API for querying the list of  PR and Issue.
 
-<img src="img/service-framework.png"  alt="framework"/>
+<img src="img/service-framework-en.png"  alt="framework"/>
 <p style="text-align: center; font-size: 10px">service framework</p>
 
 ### Data synchronization
