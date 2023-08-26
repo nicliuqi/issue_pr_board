@@ -8,6 +8,7 @@ import (
 	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/orm"
 	"github.com/chenhg5/collection"
+	"gopkg.in/yaml.v2"
 	"io"
 	"io/ioutil"
 	"issue_pr_board/models"
@@ -297,6 +298,7 @@ func (c *IssueNewController) Post() {
 	res := collection.Collect(string(content)).ToMap()
 	issueId := res["id"]
 	number := res["ident"]
+	issueUrl := res["issue_url"]
 	result := make(map[string]interface{})
 	result["issue_id"] = issueId
 	result["number"] = number
@@ -320,6 +322,7 @@ func (c *IssueNewController) Post() {
 		}
 	}
 	cleanCode(addr, code)
+	go NewIssueNotify(int(reqBody["project_id"].(float64)), number.(string), issueUrl.(string), reqBody["title"].(string))
 	c.ApiJsonReturn("创建成功", 201, result)
 }
 
@@ -846,5 +849,66 @@ func GetIssuePriority(priorityNum float64) string {
 		return "严重"
 	default:
 		return "不指定"
+	}
+}
+
+type NotifyConf struct {
+	Sigs []struct {
+		Name	  string   `yaml:"name"`
+		Receivers []string `yaml:"receivers"`
+	}
+	Repos []struct {
+		Name	  string   `yaml:"name"`
+		Receivers []string `yaml:"receivers"`
+	}
+}
+
+func NewIssueNotify(enterpriseNumber int, number, link, title string) {
+	sigName, repoName := SearchRepoByNumber(enterpriseNumber)
+	if sigName == "" || repoName == "" {
+		return
+	}
+
+	var notifyConf NotifyConf
+	buffer, err := ioutil.ReadFile("conf/new_issue_notify.yaml")
+	err = yaml.Unmarshal(buffer, &notifyConf)
+	if err != nil {
+		logs.Error(err)
+		return
+	}
+	sigs := notifyConf.Sigs
+	repos := notifyConf.Repos
+
+	for _, sig := range sigs {
+		name := sig.Name
+		if name != sigName {
+			continue
+		} else {
+			receivers := sig.Receivers
+			for _, receiver := range receivers {
+				ep := utils.EmailParams{Receiver: receiver, Repo: repoName, Number: number, Link: link}
+				err = utils.SendNewIssueNotifyEmail(ep)
+				if err != nil {
+					logs.Error(err)
+				}
+			}
+			break
+		}
+	}
+	for _, repo := range repos {
+		name := repo.Name
+		if name != repoName {
+			continue
+		} else {
+			receivers := repo.Receivers
+			for _, receiver := range receivers {
+				ep := utils.EmailParams{Receiver: receiver, Repo: repoName, Number: number, Link: link}
+				err = utils.SendNewIssueNotifyEmail(ep)
+				if err != nil {
+					logs.Error(err)
+				}
+			}
+			break
+		}
 	}
 }

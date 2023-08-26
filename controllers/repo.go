@@ -131,6 +131,22 @@ func SearchRepo(name string) bool {
 	return true
 }
 
+func SearchRepoByNumber(number int) (sig string, repo string) {
+	var repos []models.Repo
+	o := orm.NewOrm()
+	searchSql := fmt.Sprintf("select * from repo where enterprise_number=%v", number)
+	_, err := o.Raw(searchSql).QueryRows(&repos)
+	if err != nil {
+		logs.Error(err)
+		return "", ""
+	} else {
+		for _, r := range repos {
+			return r.Sig, r.Name
+		}
+	}
+	return
+}
+
 type RepoResponse struct {
 	Id        int    `json:"id"`
 	FullName  string `json:"full_name"`
