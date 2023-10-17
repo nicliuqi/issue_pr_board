@@ -1,0 +1,27 @@
+# The file supports notifying receivers through email when an issue is created.
+# You catn define a series of SIGs or repositories to notify, each of them contains fields "name" and "receivers",
+# the name should be the name of the SIG/repository, and the receivers should be a list of email address.
+#
+# If you want to follow a new issue of a SIG created by QuickIssue, the following is an example
+#
+# sigs:
+#   - name: Infrastructure
+#     receivers:
+#       - receiver1@aaa
+#       - receiver2@bbb
+#       - receiver3@ccc
+#
+# Or maybe you just want to follow some repositories, you could config them like
+#
+# repos:
+#   - name: openeuler/infrastructure
+#     receivers:
+#       - receiver1@aaa
+#       - receiver2@bbb
+#       - receiver3@ccc
+#   - name: src-openeuler/kernel
+#     receivers:
+#       - receiver1@aaa
+#       - receiver2@bbb
+#       - receiver3@ccc
+

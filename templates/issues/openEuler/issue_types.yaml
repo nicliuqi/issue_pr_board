@@ -72,3 +72,8 @@
   platforms:
     - unique_id: 715717
       platform: gitee
+
+- name: 用户需求
+  platforms:
+    - unique_id: 849151
+      platform: gitee

@@ -1,59 +1,106 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/astaxie/beego/logs"
 	"github.com/jordan-wright/email"
+	"html/template"
+	"io/ioutil"
 	"net/smtp"
 	"os"
+	"path/filepath"
 )
 
-func SendVerifyEmail(receiver string, code string) error {
+const (
+	CommentAttentionTemplate = "templates/email/comment_attention.tmpl"
+	NewIssueNotifyTemplate = "templates/email/new_issue_notify.tmpl"
+	StateChangeAttentionTemplate = "templates/email/state_change_attention.tmpl"
+	VerifyTemplate = "templates/email/verify.tmpl"
+)
+
+type EmailParams struct {
+        Body      string
+        Code      string
+        Commenter string
+        Link      string
+        Number    string
+        Receiver  string
+        Repo      string
+        State     string
+        Title     string
+}
+
+func SendVerifyEmail(ep EmailParams) error {
 	subject := "openEuler QuickIssue"
-	htmlBody := fmt.Sprintf("<p>Dear user,</p></br>"+
-		"<p>We have received your request to submit a quick issue to openEuler projects. Please ignore this email if it is not operated by yourself.</p>"+
-		"<p>The following is the verification code</p>"+
-		"<p><b>%s</b></p>"+
-		"<p>The verification code is valid for 10 minutes. If it expires, you need to obtain it again.</p></br>"+
-		"Have any questions or need help? Just create an issue to <a href='https://gitee.com/openeuler/infrastructure/issues'>Infrastructure</a> or send an email to infra@openeuler.org.", code)
-	err := sendEmail(receiver, subject, htmlBody)
+	htmlBody := loadTemplate(VerifyTemplate, ep)
+	err := sendEmail(ep.Receiver, subject, htmlBody)
 	if err != nil {
 		return err
 	} else {
-		logs.Info("Send verification code to", receiver)
+		logs.Info("Send verification code to", ep.Receiver)
 		return err
 	}
 }
 
-func SendCommentAttentionEmail(receiver string, login string, number string, title string, link string, body string) error {
-	subject := fmt.Sprintf("openEuler QuickIssue: #%v %v", number, title)
-	htmlBody := fmt.Sprintf(
-		"<p>You are receiving this email because you submitted the issue <a href='%v'>#%v</a>.</p>"+
-			"<p><a href='https://gitee.com/%v'>@%v</a>&nbsp;said:</p>"+
-			"<pre>%v</pre>", link, number, login, login, body)
-	err := sendEmail(receiver, subject, htmlBody)
+func SendCommentAttentionEmail(ep EmailParams) error {
+	subject := fmt.Sprintf("openEuler QuickIssue: #%v %v", ep.Number, ep.Title)
+	htmlBody := loadTemplate(CommentAttentionTemplate, ep)
+	err := sendEmail(ep.Receiver, subject, htmlBody)
 	if err != nil {
 		logs.Error(err)
 		return err
 	} else {
-		logs.Info("Send issue comment attention to", receiver)
+		logs.Info("Send issue comment attention to", ep.Receiver)
 		return nil
 	}
 }
 
-func SendStateChangeAttentionEmail(receiver string, issueState string, number string, title string, link string) error {
-	subject := fmt.Sprintf("openEuler QuickIssue: #%v %v", number, title)
-	htmlBody := fmt.Sprintf(
-		"<p>You are receiving this email because you submitted the issue <a href='%v'>#%v</a>.</p>"+
-			"<p>The issue state has been changed to【%v】.</p>", link, number, issueState)
-	err := sendEmail(receiver, subject, htmlBody)
+func SendStateChangeAttentionEmail(ep EmailParams) error {
+	subject := fmt.Sprintf("openEuler QuickIssue: #%v %v", ep.Number, ep.Title)
+	htmlBody := loadTemplate(StateChangeAttentionTemplate, ep)
+	err := sendEmail(ep.Receiver, subject, htmlBody)
 	if err != nil {
 		logs.Error(err)
 		return err
 	} else {
-		logs.Info("Send issue state change attention to", receiver)
+		logs.Info("Send issue state change attention to", ep.Receiver)
 		return nil
 	}
+}
+
+func SendNewIssueNotifyEmail(ep EmailParams) error {
+	subject := fmt.Sprintf("Notice a new issue -#%v", ep.Number)
+	htmlBody := loadTemplate(NewIssueNotifyTemplate, ep)
+	err := sendEmail(ep.Receiver, subject, htmlBody)
+	if err != nil {
+		logs.Error(err)
+		return err
+	} else {
+		logs.Info("Send new issue notification to", ep.Receiver)
+		return nil
+	}
+}
+
+func loadTemplate(path string, data interface{}) string {
+	content, err := ioutil.ReadFile(path)
+	name := filepath.Base(path)
+	tmpl, err := template.New(name).Parse(string(content))
+	if err != nil {
+		logs.Error(err)
+		return ""
+	}
+	renderString, err := renderTemplate(tmpl, data)
+	return renderString
+}
+
+func renderTemplate(tmpl *template.Template, data interface{}) (string, error) {
+        buf := new(bytes.Buffer)
+        err := tmpl.Execute(buf, data)
+        if err != nil {
+                return "", fmt.Errorf("failed to execute template")
+        }
+        return buf.String(), nil
 }
 
 func sendEmail(receiver string, subject string, htmlBody string) error {

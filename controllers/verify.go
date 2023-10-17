@@ -79,6 +79,7 @@ func (c *VerifyController) Post() {
 	timeUnix := time.Now().Unix()
 	interval, _ := beego.AppConfig.Int64("verifyinterval")
 	var verify models.Verify
+	ep := utils.EmailParams{Receiver: addr.(string), Code: captchaValue}
 	if searchEmailRecord(addr.(string)) {
 		o := orm.NewOrm()
 		qs := o.QueryTable("verify")
@@ -91,7 +92,7 @@ func (c *VerifyController) Post() {
 			logs.Error("The interval between two verifications cannot be less than 1 minute, addr:", addr)
 			c.ApiJsonReturn("发送验证码的时间间隔不能低于一分钟", 400, "")
 		}
-		err = utils.SendVerifyEmail(addr.(string), captchaValue)
+		err = utils.SendVerifyEmail(ep)
 		if err != nil {
 			logs.Error("Fail to send email, err:", err)
 			c.ApiJsonReturn("验证邮件发送失败", 400, "")
@@ -107,7 +108,7 @@ func (c *VerifyController) Post() {
 		verify.Addr = addr.(string)
 		verify.Code = captchaValue
 		verify.Created = timeUnix
-		err := utils.SendVerifyEmail(addr.(string), captchaValue)
+		err := utils.SendVerifyEmail(ep)
 		if err != nil {
 			logs.Error("Fail to send email, err:", err)
 			c.ApiJsonReturn("验证邮件发送失败", 400, "")

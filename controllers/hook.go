@@ -177,13 +177,17 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 					return
 				}
 				commentBody := reqBody["comment"].(map[string]interface{})["body"].(string)
-				err = utils.SendCommentAttentionEmail(item.Reporter, commenterId, number, title, htmlUrl, commentBody)
+				ep := utils.EmailParams{Receiver: item.Reporter, Commenter: commenterId, Number: number, Title: title,
+				    Link: htmlUrl, Body: commentBody}
+				err = utils.SendCommentAttentionEmail(ep)
 				if err != nil {
 					logs.Error("Fail to send issue comment attention email, err:", err)
 				}
 			}
 			if action == "state_change" {
-				err = utils.SendStateChangeAttentionEmail(item.Reporter, issueState, number, title, htmlUrl)
+				ep := utils.EmailParams{Receiver: item.Reporter, State: issueState, Number: number, Title: title,
+			            Link: htmlUrl}
+				err = utils.SendStateChangeAttentionEmail(ep)
 				if err != nil {
 					logs.Error("Fail to send issue state change attention email, err:", err)
 				}
