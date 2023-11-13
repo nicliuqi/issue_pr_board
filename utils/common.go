@@ -114,6 +114,9 @@ func CheckAuth(authorization string) bool {
 		return false
 	}
 	interval, _ := beego.AppConfig.Int64("verifyinterval")
+	if ts-int64(timestamp) < 0 {
+		return false
+	}
 	if ts-int64(timestamp) > interval {
 		return false
 	}

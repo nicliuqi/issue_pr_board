@@ -139,6 +139,9 @@ func (c *PullsController) Get() {
 	var pull []models.Pull
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 10)
+	if perPage > 100 {
+		perPage = 100
+	}
 	qp := QueryPullParam{
 		Org:       c.GetString("org", ""),
 		Repo:      c.GetString("repo", ""),

@@ -192,9 +192,6 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 	countSql := strings.Replace(rawSql, "*", "count(*)", -1)
 	var sqlCount int
 	_ = o.Raw(countSql).QueryRow(&sqlCount)
-	if perPage >= 100 {
-		perPage = 100
-	}
 	offset := perPage * (page - 1)
 	rawSql += fmt.Sprintf(" limit %v offset %v", perPage, offset)
 	return int64(sqlCount), rawSql
@@ -204,6 +201,9 @@ func (c *IssuesController) Get() {
 	var issue []models.Issue
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 10)
+	if perPage >= 100 {
+		perPage = 100
+	}
 	qp := QueryIssueParam{
 		Org:        c.GetString("org", ""),
 		Repo:       c.GetString("repo", ""),
@@ -854,11 +854,11 @@ func GetIssuePriority(priorityNum float64) string {
 
 type NotifyConf struct {
 	Sigs []struct {
-		Name	  string   `yaml:"name"`
+		Name      string   `yaml:"name"`
 		Receivers []string `yaml:"receivers"`
 	}
 	Repos []struct {
-		Name	  string   `yaml:"name"`
+		Name      string   `yaml:"name"`
 		Receivers []string `yaml:"receivers"`
 	}
 }
