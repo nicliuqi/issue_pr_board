@@ -102,6 +102,9 @@ func (c *ReposController) Get() {
 	var repo []models.Repo
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 10)
+	if perPage > 100 {
+		perPage = 100
+	}
 	qp := QueryRepoParam{
 		Keyword:   c.GetString("keyword", ""),
 		Sig:       c.GetString("sig", ""),
