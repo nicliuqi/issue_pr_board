@@ -1,5 +1,7 @@
-FROM golang:latest as BUILDER
+FROM golang:1.17.3 as BUILDER
 MAINTAINER liuqi<469227928@qq.com>
+RUN go env -w GO111MODULE=on
+RUN go env -w GOPROXY=https://goproxy.cn,direct
 COPY . /go/src/github.com/opensourceways/issue_pr_board
 RUN cd /go/src/github.com/opensourceways/issue_pr_board && go mod tidy && CGO_ENABLED=1 go build -v -o ./ipb main.go sync.go
 
