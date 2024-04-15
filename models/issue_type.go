@@ -6,7 +6,7 @@ import (
 	"github.com/astaxie/beego/orm"
 	"github.com/chenhg5/collection"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
+	"os"
 	"path"
 	"reflect"
 )
@@ -31,7 +31,7 @@ type IssueTypePlatform struct {
 }
 
 func readIssueTypesInfo(filePath string) []IssueTypeInfo {
-	buf, err := ioutil.ReadFile(filePath)
+	buf, err := os.ReadFile(filePath)
 	if err != nil {
 		logs.Error("Fail to read issue types yaml, err:", err)
 	}
@@ -46,7 +46,8 @@ func readIssueTypesInfo(filePath string) []IssueTypeInfo {
 func searchIssueType(name string, platform string, organization string) (bool, int) {
 	var issueType IssueType
 	o := orm.NewOrm()
-	searchSql := fmt.Sprintf("select * from issue_type where name='%v' and platform='%v' and organization='%v'", name, platform, organization)
+	searchSql := fmt.Sprintf("select * from issue_type where name='%v' and platform='%v' and organization='%v'",
+	    name, platform, organization)
 	err := o.Raw(searchSql).QueryRow(&issueType)
 	if err == orm.ErrNoRows {
 		return false, 0
@@ -55,12 +56,12 @@ func searchIssueType(name string, platform string, organization string) (bool, i
 }
 
 func InitIssueType() {
-	organizations, err := ioutil.ReadDir(path.Join("templates", "issues"))
+	organizations, err := os.ReadDir(path.Join("templates", "issues"))
 	if err != nil {
 		logs.Error("Fail to get organization directory list, err:", err)
 	}
 	for _, organization := range organizations {
-		files, err := ioutil.ReadDir(path.Join("templates", "issues", organization.Name()))
+		files, err := os.ReadDir(path.Join("templates", "issues", organization.Name()))
 		if err != nil {
 			logs.Error("Fail to get templates directory list, err:", err)
 		}
@@ -79,7 +80,7 @@ func InitIssueType() {
 			issueType.Name = i.Name
 			if collection.Collect(orgFiles).Contains(i.Name + ".md") {
 				templateFile := path.Join("templates", "issues", organization.Name(), i.Name+".md")
-				data, err := ioutil.ReadFile(templateFile)
+				data, err := os.ReadFile(templateFile)
 				if err != nil {
 					logs.Error("Fail to read issue type template, err:", err)
 				}

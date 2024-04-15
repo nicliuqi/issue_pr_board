@@ -221,7 +221,8 @@ func (c *PullsReposController) Get() {
 	if sig == "" {
 		sql = "select distinct repo from pull where sig != 'Private' order by repo"
 	} else {
-		sql = fmt.Sprintf("select distinct repo from pull where sig != 'Private' and sig = '%s' order by repo", sig)
+		sql = fmt.Sprintf("select distinct repo from pull where sig != 'Private' and sig = '%s' order by repo",
+		    sig)
 	}
 	count, err := o.Raw(sql).QueryRows(&pull)
 	if err != nil {

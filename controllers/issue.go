@@ -10,13 +10,12 @@ import (
 	"github.com/chenhg5/collection"
 	"gopkg.in/yaml.v2"
 	"io"
-	"io/ioutil"
+	"iusse_pr_board/config"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
 	"mime/multipart"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -253,11 +252,6 @@ type IssueNewController struct {
 }
 
 func (c *IssueNewController) Post() {
-	authorization := c.Ctx.Input.Header("Authorization")
-	authResult := utils.CheckAuth(authorization)
-	if !authResult {
-		c.ApiJsonReturn("访问权限限制", 401, "")
-	}
 	logs.Info("Receive a request of creating an issue")
 	body := c.Ctx.Input.RequestBody
 	if body == nil {
@@ -275,7 +269,7 @@ func (c *IssueNewController) Post() {
 	payloadMap["title"] = reqBody["title"]
 	payloadMap["description"] = reqBody["description"]
 	payloadMap["issue_type_id"] = reqBody["issue_type_id"]
-	enterpriseId := os.Getenv("EnterpriseId")
+	enterpriseId := config.AppConfig.EnterpriseId
 	url := fmt.Sprintf("https://api.gitee.com/enterprises/%v/issues", enterpriseId)
 	payload := strings.NewReader(collection.Collect(payloadMap).ToJson())
 	req, _ := http.NewRequest("POST", url, payload)
@@ -288,7 +282,7 @@ func (c *IssueNewController) Post() {
 	if resp.StatusCode != 201 {
 		c.ApiJsonReturn("创建issue失败", resp.StatusCode, resp.Body)
 	}
-	content, _ := ioutil.ReadAll(resp.Body)
+	content, _ := io.ReadAll(resp.Body)
 	err = resp.Body.Close()
 	if err != nil {
 		logs.Error("Fail to close response body of creating enterprise issues, err:", err)
@@ -304,7 +298,8 @@ func (c *IssueNewController) Post() {
 	result["number"] = number
 	if !SearchIssueRecord(number.(string)) {
 		o := orm.NewOrm()
-		insertSql := fmt.Sprintf("insert into issue (state, number, reporter) values('open', '%s', '%s')", number, addr)
+		insertSql := fmt.Sprintf("insert into issue (state, number, reporter) values('open', '%s', '%s')",
+		    number, addr)
 		_, err = o.Raw(insertSql).Exec()
 		if err != nil {
 			logs.Error("Fail to create issue with reporter:", err)
@@ -664,109 +659,11 @@ func (c *TypesController) Get() {
 	c.ApiJsonReturn("请求成功", 200, issueTypes)
 }
 
-type UploadAttachmentController struct {
-	BaseController
-}
-
-type Attachment struct {
-	AttachId string `form:"attach_id"`
-}
-
-func (c *UploadAttachmentController) Post() {
-	authorization := c.Ctx.Input.Header("Authorization")
-	authResult := utils.CheckAuth(authorization)
-	if !authResult {
-		c.ApiJsonReturn("访问权限限制", 401, "")
-	}
-	tmpDir, _ := os.MkdirTemp("", "")
-	var attachment Attachment
-	err := c.ParseForm(&attachment)
-	if err != nil {
-		c.ApiJsonReturn("解析表单出错", 400, err)
-	}
-	logs.Info("Ready to upload a attachment")
-	file, h, err := c.GetFile("file")
-	defer func(file multipart.File) {
-		err = file.Close()
-		if err != nil {
-			logs.Error("Fail to close uploaded file, err:", err)
-		}
-	}(file)
-	if err != nil {
-		logs.Error("Fail to get uploaded file")
-	}
-	tmpPath := fmt.Sprintf(tmpDir + "/" + h.Filename)
-	err = c.SaveToFile("file", tmpPath)
-	if err != nil {
-		logs.Error("Fail to save file")
-	}
-	enterpriseId := os.Getenv("EnterpriseId")
-	token := models.GetV8Token()
-	url := fmt.Sprintf("https://api.gitee.com/enterprises/%v/attach_files/upload", enterpriseId)
-	payload := &bytes.Buffer{}
-	writer := multipart.NewWriter(payload)
-	uploadFile, err := os.Open(tmpPath)
-	if err != nil {
-		logs.Error("Fail to open uploadFile")
-	}
-	defer func(uploadFile multipart.File) {
-		err = uploadFile.Close()
-		if err != nil {
-			logs.Error("Fail to close file")
-		}
-	}(uploadFile)
-	part1, _ := writer.CreateFormFile("file", filepath.Base(tmpPath))
-	_, err = io.Copy(part1, file)
-	if err != nil {
-		logs.Error("Fail to add file to form data")
-	}
-	_ = writer.WriteField("attach_type", "issue")
-	_ = writer.WriteField("attach_id", attachment.AttachId)
-	_ = writer.WriteField("access_token", token)
-	err = writer.Close()
-	if err != nil {
-		logs.Error("Fail to close writer")
-	}
-	client := &http.Client{}
-	req, err := http.NewRequest("POST", url, payload)
-	if err != nil {
-		logs.Error("Fail to send request")
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	res, err := client.Do(req)
-	if err != nil {
-		logs.Error("Fail to get response")
-	}
-	defer func(Body io.ReadCloser) {
-		err = Body.Close()
-		if err != nil {
-			logs.Error("Fail to close body")
-		}
-	}(res.Body)
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		logs.Error("Fail to read Body of res, err:", err)
-	}
-	err = os.Remove(tmpPath)
-	if err != nil {
-		logs.Error("Fail to remove temp file, err:", err)
-	}
-	if res.StatusCode != 201 {
-		c.ApiJsonReturn("上传失败", res.StatusCode, collection.Collect(string(body)).ToMap())
-	}
-	c.ApiJsonReturn("成功上传附件", 200, collection.Collect(string(body)).ToMap())
-}
-
 type UploadImageController struct {
 	BaseController
 }
 
 func (c *UploadImageController) Post() {
-	authorization := c.Ctx.Input.Header("Authorization")
-	authResult := utils.CheckAuth(authorization)
-	if !authResult {
-		c.ApiJsonReturn("访问权限限制", 401, "")
-	}
 	logs.Info("Ready to upload a image")
 	file, _, err := c.GetFile("file")
 	defer func(file multipart.File) {
@@ -783,7 +680,7 @@ func (c *UploadImageController) Post() {
 		return
 	}
 	bufWriter := bufio.NewWriter(buf)
-	content, err := ioutil.ReadAll(buf)
+	content, err := io.ReadAll(buf)
 	if err != nil {
 		logs.Error("Cannot read buf of the uploaded file")
 		c.ApiJsonReturn("上传失败", 400, err)
@@ -802,8 +699,9 @@ func (c *UploadImageController) Post() {
 		logs.Warn("Cannot get a valid V8 access token")
 		c.ApiJsonReturn("认证失败", 401, "")
 	}
-	enterpriseId := os.Getenv("EnterpriseId")
-	url := fmt.Sprintf("https://api.gitee.com/enterprises/%v/attach_files/upload_with_base_64?access_token=%s", enterpriseId, token)
+	enterpriseId := config.AppConfig.EnterpriseId
+	url := fmt.Sprintf("https://api.gitee.com/enterprises/%v/attach_files/upload_with_base_64?access_token=%s",
+	    enterpriseId, token)
 	req, _ := http.NewRequest("POST", url, payload)
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -817,7 +715,7 @@ func (c *UploadImageController) Post() {
 			logs.Error("Fail to close response body of uploading file")
 		}
 	}(resp.Body)
-	result, _ := ioutil.ReadAll(resp.Body)
+	result, _ := io.ReadAll(resp.Body)
 	res := collection.Collect(string(result)).ToMap()
 	if res["success"] == true {
 		c.ApiJsonReturn("上传成功", 200, res["file"])
@@ -870,7 +768,7 @@ func NewIssueNotify(enterpriseNumber int, number, link, title string) {
 	}
 
 	var notifyConf NotifyConf
-	buffer, err := ioutil.ReadFile("conf/new_issue_notify.yaml")
+	buffer, err := os.ReadFile("conf/new_issue_notify.yaml")
 	err = yaml.Unmarshal(buffer, &notifyConf)
 	if err != nil {
 		logs.Error(err)

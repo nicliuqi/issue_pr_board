@@ -6,7 +6,8 @@ import (
 	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/orm"
 	_ "github.com/go-sql-driver/mysql"
-	"io/ioutil"
+	"io"
+	"issue_pr_board/config"
 	"issue_pr_board/utils"
 	"net/http"
 	"os"
@@ -32,25 +33,26 @@ type Pull struct {
 }
 
 func init() {
-	dbHost := beego.AppConfig.String("dbhost")
-	dbPort := beego.AppConfig.String("dbport")
-	dbUser := beego.AppConfig.String("dbuser")
-	dbPassword := beego.AppConfig.String("dbpassword")
-	dbName := beego.AppConfig.String("dbname")
-	dbChar := beego.AppConfig.String("dbchar")
-	dataSource := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=%v&loc=Local", dbUser, dbPassword, dbHost, dbPort, dbName, dbChar)
+	if err := config.InitAppConfig(beego.AppConfig.String("app_conf")); err != nil {
+		logs.Error(err)
+		os.Exit(1)
+	}
+	dataSource := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=%v&loc=Local", config.AppConfig.DBUsername,
+            config.AppConfig.DBPassword, config.Appconfig.DBHost, config.Appconfig.DBPort, config.AppConfig.DBName,
+            config.AppConfig.DBChar)
 	err := orm.RegisterDataBase("default", "mysql", dataSource)
 	if err != nil {
 		logs.Error("Fail to register database, err:", err)
 		return
 	}
-	orm.RegisterModel(new(Pull), new(Issue), new(Repo), new(Secret), new(Verify), new(Label), new(IssueType))
+	orm.RegisterModel(new(Pull), new(Issue), new(Repo), new(Verify), new(Label), new(IssueType))
 	err = orm.RunSyncdb("default", false, true)
 	if err != nil {
 		logs.Error("Fail to sync databases, err:", err)
 		return
 	}
-	url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/labels?access_token=%v", os.Getenv("AccessToken"))
+	url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/labels?access_token=%v",
+            config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get enterprise labels colors, err：", err)
@@ -58,7 +60,7 @@ func init() {
 	if resp.StatusCode != 200 {
 		logs.Error("Get unexpected response when getting enterprise labels colors, status:", resp.Status)
 	}
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	err = resp.Body.Close()
 	if err != nil {
 		logs.Error("Fail to close response body of enterprise issues, err:", err)

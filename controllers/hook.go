@@ -6,11 +6,11 @@ import (
 	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/orm"
 	"github.com/chenhg5/collection"
-	"io/ioutil"
+	"io"
+	"issue_pr_board/config"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -37,7 +37,8 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 		logs.Error("Fail to get sigs mapping.")
 		return
 	}
-	url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/issues/%v?access_token=%v", number, os.Getenv("AccessToken"))
+	url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/issues/%v?access_token=%v", number,
+	    config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get the issue, err：", err)
@@ -47,7 +48,7 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 		logs.Error("Get unexpected response when getting the issue, status:", resp.Status)
 		return
 	}
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	err = resp.Body.Close()
 	if err != nil {
 		logs.Error("Fail to close response body of the issue, err:", err)
@@ -186,7 +187,7 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 			}
 			if action == "state_change" {
 				ep := utils.EmailParams{Receiver: item.Reporter, State: issueState, Number: number, Title: title,
-			            Link: htmlUrl}
+				    Link: htmlUrl}
 				err = utils.SendStateChangeAttentionEmail(ep)
 				if err != nil {
 					logs.Error("Fail to send issue state change attention email, err:", err)
@@ -216,7 +217,8 @@ func HandlePullEvent(reqBody map[string]interface{}) {
 	repo := strings.Split(htmlUrl, "/")[4]
 	fullName := org + "/" + repo
 	number := strings.Split(htmlUrl, "/")[6]
-	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/pulls/%v?access_token=%v", fullName, number, os.Getenv("AccessToken"))
+	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/pulls/%v?access_token=%v", fullName, number,
+            config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get the pull request, err：", err)
@@ -226,7 +228,7 @@ func HandlePullEvent(reqBody map[string]interface{}) {
 		logs.Error("Get unexpected response when getting the pull request, status:", resp.Status)
 		return
 	}
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	err = resp.Body.Close()
 	if err != nil {
 		logs.Error("Fail to close response body of the pull request, err：", err)

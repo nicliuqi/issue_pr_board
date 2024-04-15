@@ -24,6 +24,12 @@ func (c *BaseController) ApiJsonReturn(msg string, code int, data interface{}) {
 	c.StopRun()
 }
 
+func (c *BaseController) CustomJsonReturn(data interface{}) {
+	c.Data["json"] = data
+	c.ServeJSON()
+	c.StopRun()
+}
+
 type DataReturn struct {
 	Total   int64       `json:"total"`
 	Page    int         `json:"page"`

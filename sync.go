@@ -6,17 +6,17 @@ import (
 	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/orm"
 	_ "github.com/go-sql-driver/mysql"
-	"io/ioutil"
+	"io"
+	"issue_pr_board/config"
 	"issue_pr_board/controllers"
 	"issue_pr_board/models"
 	_ "issue_pr_board/models"
 	"issue_pr_board/utils"
 	"net/http"
-	"os"
 	"strings"
 )
 
-var token = os.Getenv("AccessToken")
+var token = config.AppConfig.AccessToken
 
 func SyncEnterprisePulls() error {
 	logs.Info("Starting to sync pulls...")
@@ -38,7 +38,7 @@ func SyncEnterprisePulls() error {
 			logs.Error("Get unexpected response when getting enterprise pulls, status:", resp.Status)
 			continue
 		}
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		err = resp.Body.Close()
 		if err != nil {
 			logs.Error("Fail to close response body of enterprise pull requests, err：", err)
@@ -180,7 +180,7 @@ func SyncEnterpriseIssues() error {
 			logs.Error("Get unexpected response when getting enterprise issues, status:", resp.Status)
 			continue
 		}
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		err = resp.Body.Close()
 		if err != nil {
 			logs.Error("Fail to close response body of enterprise issues, err:", err)
@@ -373,7 +373,7 @@ func getRepoBranches(repo string) string {
 		logs.Error("Get unexpected response when getting repo branches, status:", resp.Status)
 		return ""
 	}
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	err = resp.Body.Close()
 	if err != nil {
 		logs.Error("Fail to close response body of repo branches, err:", err)
@@ -399,7 +399,7 @@ func getRepoReviewers(repo string) string {
 		logs.Error("Get unexpected response when getting repo members, status:", resp.Status)
 		return ""
 	}
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	err = resp.Body.Close()
 	if err != nil {
 		logs.Error("Fail to close response body of repo members, err:", err)

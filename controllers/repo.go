@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/orm"
-	"io/ioutil"
+	"io"
+	"issue_pr_board/config"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -164,7 +164,7 @@ func SyncRepoNumber() error {
 	page := 1
 	for {
 		logs.Info("Sync repos: Page", page)
-		url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/repos?type=all&page=%v&per_page=100&access_token=%v", page, os.Getenv("AccessToken"))
+		url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/repos?type=all&page=%v&per_page=100&access_token=%v", page, config.AppConfig.AccessToken)
 		resp, err := http.Get(url)
 		if err != nil {
 			logs.Error("Fail to get enterprise pull requests, err：", err)
@@ -174,7 +174,7 @@ func SyncRepoNumber() error {
 			logs.Error("Get unexpected response when getting V8 enterprise repos, status:", resp.Status)
 			continue
 		}
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		err = resp.Body.Close()
 		if err != nil {
 			logs.Error("Fail to close response body of V8 enterprise repos, err：", err)

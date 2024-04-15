@@ -3,15 +3,12 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/TestsLing/aj-captcha-go/util"
-	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
 	"github.com/chenhg5/collection"
-	"io/ioutil"
+	"io"
+	"issue_pr_board/config"
 	"net/http"
-	"os"
 	"strings"
-	"time"
 )
 
 func JsonToSlice(str string) []map[string]interface{} {
@@ -43,13 +40,13 @@ func FormatTime(createdAt string) string {
 
 func GetSigsMapping() (map[string][]string, map[string]string) {
 	url := fmt.Sprintf("https://gitee.com/api/v5/repos/openeuler/community/git/trees/master?access_token=%s"+
-		"&recursive=1", os.Getenv("AccessToken"))
+		"&recursive=1", config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get sigs mapping, err: %v", err)
 		return nil, nil
 	}
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	err = resp.Body.Close()
 	if err != nil {
 		logs.Error("Fail to close response body of getting sigs mapping, err:", err)
@@ -96,33 +93,4 @@ func CheckParams(param string) string {
 		}
 	}
 	return param
-}
-
-func CheckAuth(authorization string) bool {
-	ts := time.Now().Unix()
-	authJson := util.AesDecrypt(authorization, os.Getenv("AUTH_SECRET"))
-	if authJson == "" {
-		return false
-	}
-	authMap := collection.Collect(authJson).ToMap()
-	secret, ok := authMap["secret"].(string)
-	if !ok {
-		return false
-	}
-	timestamp, ok2 := authMap["timestamp"].(float64)
-	if !ok2 {
-		return false
-	}
-	interval, _ := beego.AppConfig.Int64("verifyinterval")
-	if ts-int64(timestamp) < 0 {
-		return false
-	}
-	if ts-int64(timestamp) > interval {
-		return false
-	}
-	if secret != os.Getenv("AUTH_SECRET") {
-		return false
-	} else {
-		return true
-	}
 }

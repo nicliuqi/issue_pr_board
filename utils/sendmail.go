@@ -6,17 +6,17 @@ import (
 	"github.com/astaxie/beego/logs"
 	"github.com/jordan-wright/email"
 	"html/template"
-	"io/ioutil"
+	"issue_pr_board/config"
 	"net/smtp"
 	"os"
 	"path/filepath"
 )
 
 const (
-	CommentAttentionTemplate = "templates/email/comment_attention.tmpl"
-	NewIssueNotifyTemplate = "templates/email/new_issue_notify.tmpl"
+	CommentAttentionTemplate     = "templates/email/comment_attention.tmpl"
+	NewIssueNotifyTemplate	     = "templates/email/new_issue_notify.tmpl"
 	StateChangeAttentionTemplate = "templates/email/state_change_attention.tmpl"
-	VerifyTemplate = "templates/email/verify.tmpl"
+	VerifyTemplate               = "templates/email/verify.tmpl"
 )
 
 type EmailParams struct {
@@ -83,7 +83,7 @@ func SendNewIssueNotifyEmail(ep EmailParams) error {
 }
 
 func loadTemplate(path string, data interface{}) string {
-	content, err := ioutil.ReadFile(path)
+	content, err := os.ReadFile(path)
 	name := filepath.Base(path)
 	tmpl, err := template.New(name).Parse(string(content))
 	if err != nil {
@@ -104,17 +104,17 @@ func renderTemplate(tmpl *template.Template, data interface{}) (string, error) {
 }
 
 func sendEmail(receiver string, subject string, htmlBody string) error {
-	username := os.Getenv("SMTP_USERNAME")
-	passwd := os.Getenv("SMTP_PASSWORD")
-	host := os.Getenv("SMTP_HOST")
-	port := os.Getenv("SMTP_PORT")
+	username := config.AppConfig.SMTPUsername
+	passwd := config.AppConfig.SMTPPassword
+	host := config.AppConfig.SMTPHost
+	port := config.AppConfig.SMTPPort
 	em := email.NewEmail()
 	em.From = username
 	em.To = []string{receiver}
 	em.Subject = subject
 	em.HTML = []byte(htmlBody)
 	auth := smtp.PlainAuth("", username, passwd, host)
-	err := em.Send(host+":"+port, auth)
+	err := em.Send(fmt.Sprintf("%v:%v", host, port), auth)
 	if err != nil {
 		return err
 	}

@@ -13,7 +13,8 @@ import (
 )
 
 func init() {
-	beego.Router("/attachment", &controllers.UploadAttachmentController{})
+	beego.Router("/captcha/get", &controllers.GetCaptchaController{})
+	beego.Router("/captcha/check", &controllers.CheckCaptchaController{})
 	beego.Router("/colors", &controllers.LabelsColorsController{})
 	beego.Router("/hooks", &controllers.HooksController{})
 	beego.Router("/image", &controllers.UploadImageController{})
@@ -33,5 +34,4 @@ func init() {
 	beego.Router("/pulls/refs", &controllers.PullsRefsController{})
 	beego.Router("/pulls/sigs", &controllers.PullsSigsController{})
 	beego.Router("/pulls/repos", &controllers.PullsReposController{})
-	beego.Router("/verify", &controllers.VerifyController{})
 }
