@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"crypyo/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,10 +12,9 @@ import (
 	"issue_pr_board/config"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"regexp"
-	"strings"
 	"time"
 )
 
@@ -25,18 +25,12 @@ type GeneralResp struct {
 }
 
 func genValidateCode(width int) string {
-	numeric := [10]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-	r := len(numeric)
-	rand.Seed(time.Now().UnixNano())
-
-	var sb strings.Builder
+	validateCode := ""
 	for i := 0; i < width; i++ {
-		_, err := fmt.Fprintf(&sb, "%d", numeric[rand.Intn(r)])
-		if err != nil {
-			return ""
-		}
+		randomInt, _ := rand.Int(rand.Reader, big.NewInt(10))
+		validateCode += randomInt.String()
 	}
-	return sb.String()
+	return validateCode
 }
 
 func verifyEmailFormat(email string) bool {
@@ -112,7 +106,13 @@ func (c *GetCaptchaController) Post() {
 	}
 	ser := utils.Factory.GetService(params.CaptchaType)
 	data, err := ser.Get()
-	res, _ := json.Marshal(successRes(data))
+	if err != nil {
+		c.CustomJsonReturn(errorRes(err))
+	}
+	res, err := json.Marshal(successRes(data))
+	if err != nil {
+		c.CustomJsonReturn(errorRes(err))
+	}
 	c.CustomJsonReturn(utils.JsonToMap(string(res)))
 }
 

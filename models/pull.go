@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
@@ -8,7 +9,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"io"
 	"issue_pr_board/config"
-	"issue_pr_board/utils"
 	"net/http"
 	"os"
 )
@@ -30,6 +30,12 @@ type Pull struct {
 	Labels      string `json:"labels" orm:"type(text);null" description:"标签"`
 	Draft       bool   `json:"draft" orm:"null" description:"是否是草稿"`
 	Mergeable   bool   `json:"mergeable" orm:"null" description:"是否可合入"`
+}
+
+type ResponseEnterpriseLabel struct {
+	Name	string	`json:"name"`
+	Color	string	`json:"color"`
+	Id	float64	`json:"id"`
 }
 
 func init() {
@@ -65,14 +71,17 @@ func init() {
 	if err != nil {
 		logs.Error("Fail to close response body of enterprise issues, err:", err)
 	}
-	if len(string(body)) == 2 {
+	var rels []ResponseEnterpriseLabel
+	err = json.Unmarshal(body, &rels)
+	if err != nil {
+		logs.Error("Fail to unmarshal response to json, err:", err)
+		return
 	}
-	labels := utils.JsonToSlice(string(body))
-	for _, i := range labels {
+	for _, i := range rels {
 		var lb Label
-		lb.Name = i["name"].(string)
-		lb.Color = i["color"].(string)
-		lb.UniqueId = i["id"].(float64)
+		lb.Name = i.Name
+		lb.Color = i.Color
+		lb.UniqueId = i.Id
 		if SearchLabel(lb.Name) {
 			o := orm.NewOrm()
 			qs := o.QueryTable("label")

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/orm"
@@ -237,7 +238,11 @@ func (c *IssuesController) Get() {
 				i.Reporter = reporter
 			}
 			description := i.Description
-			rawDescription, _ := base64.StdEncoding.DecodeString(description)
+			rawDescription, err := base64.StdEncoding.DecodeString(description)
+			if err != nil {
+				logs.Error("Fail to decode raw description, err:", err)
+				c.ApiJsonReturn("解码异常", 400, err)
+			}
 			i.Description = string(rawDescription)
 			res = append(res, i)
 		}
@@ -251,28 +256,54 @@ type IssueNewController struct {
 	BaseController
 }
 
+type NewIssueParams struct {
+	Email		string	`json:"email"`
+	Code		string	`json:"code"`
+	ProjectId	float64	`json:"project_id"`
+	Title		string	`json:"title"`
+	Description	string	`json:"description"`
+	IssueTypeId	int	`json:"issue_type_id"`
+}
+
+type NewIssueResponse struct {
+	Id		float64	`json:"id"`
+	Ident		string	`json:"ident"`
+	IssueUrl	string	`json:"issue_url"`
+}
+
 func (c *IssueNewController) Post() {
 	logs.Info("Receive a request of creating an issue")
-	body := c.Ctx.Input.RequestBody
-	if body == nil {
-		return
+	reqBody, err := io.ReadAll(c.Ctx.Request.Body)
+	err = c.Ctx.Request.Body.Close()
+	if err != nil {
+		logs.Error("Fail to close response body of creating a issue, err:", err)
+		c.ApiJsonReturn("Body关闭异常", 400, err)
 	}
-	reqBody := collection.Collect(string(body)).ToMap()
-	addr := reqBody["email"].(string)
-	code := reqBody["code"].(string)
+	var params NewIssueParams
+	err = json.Unmarshal(reqBody, &params)
+	if err != nil {
+		logs.Error("Fail to unmarshal response to json, err:", err)
+		c.ApiJsonReturn("解析JSON异常", 400, err)
+	}
+	addr := params.Email
+	code := params.Code
 	if !checkCode(addr, code) {
 		c.ApiJsonReturn("验证码错误", 400, "")
 	}
 	payloadMap := make(map[string]interface{})
-	payloadMap["access_token"] = models.GetV8Token()
-	payloadMap["project_id"] = reqBody["project_id"]
-	payloadMap["title"] = reqBody["title"]
-	payloadMap["description"] = reqBody["description"]
-	payloadMap["issue_type_id"] = reqBody["issue_type_id"]
+	payloadMap["access_token"] = config.AppConfig.V8Token
+	payloadMap["project_id"] = params.ProjectId
+	payloadMap["title"] = params.Title
+	payloadMap["description"] = params.Description
+	payloadMap["issue_type_id"] = params.IssueTypeId
 	enterpriseId := config.AppConfig.EnterpriseId
 	url := fmt.Sprintf("https://api.gitee.com/enterprises/%v/issues", enterpriseId)
 	payload := strings.NewReader(collection.Collect(payloadMap).ToJson())
-	req, _ := http.NewRequest("POST", url, payload)
+	req, err := http.NewRequest("POST", url, payload)
+	if err != nil {
+		logs.Error("Fail to send post request, err:", err)
+		c.ApiJsonReturn("发送请求异常", 400, err)
+	}
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -288,21 +319,27 @@ func (c *IssueNewController) Post() {
 		logs.Error("Fail to close response body of creating enterprise issues, err:", err)
 		c.ApiJsonReturn("无法关闭创建issue的响应", 400, err)
 	}
+	var res NewIssueResponse
+	err = json.Unmarshal(content, &res)
+	if err != nil {
+		logs.Error("Fail to unmarshal response to json, err:", err)
+		c.ApiJsonReturn("解析JSON异常", 400, err)
+	}
 	logs.Info("An issue has been created, ready to save the info")
-	res := collection.Collect(string(content)).ToMap()
-	issueId := res["id"]
-	number := res["ident"]
-	issueUrl := res["issue_url"]
+	issueId := res.Id
+	number := res.Ident
+	issueUrl := res.Issue_Url
 	result := make(map[string]interface{})
 	result["issue_id"] = issueId
 	result["number"] = number
-	if !SearchIssueRecord(number.(string)) {
+	if !SearchIssueRecord(number) {
 		o := orm.NewOrm()
 		insertSql := fmt.Sprintf("insert into issue (state, number, reporter) values('open', '%s', '%s')",
 		    number, addr)
 		_, err = o.Raw(insertSql).Exec()
 		if err != nil {
 			logs.Error("Fail to create issue with reporter:", err)
+		        c.ApiJsonReturn("创建issue失败", 400, err)
 		} else {
 			logs.Info("Save issue successfully:", number)
 		}
@@ -312,12 +349,13 @@ func (c *IssueNewController) Post() {
 		_, err = o.Raw(updateSql).Exec()
 		if err != nil {
 			logs.Error("Fail to update issue reporter:", err)
+		        c.ApiJsonReturn("更新issue失败", 400, err)
 		} else {
 			logs.Info("Update issue successfully:", number)
 		}
 	}
 	cleanCode(addr, code)
-	go NewIssueNotify(int(reqBody["project_id"].(float64)), number.(string), issueUrl.(string), reqBody["title"].(string))
+	go NewIssueNotify(int(params.ProjectId), number, issueUrl, params.Title)
 	c.ApiJsonReturn("创建成功", 201, result)
 }
 
@@ -670,10 +708,11 @@ func (c *UploadImageController) Post() {
 		err = file.Close()
 		if err != nil {
 			logs.Error(err)
+		        c.ApiJsonReturn("关闭File异常", 400, err)
 		}
 	}(file)
 	if err != nil {
-		return
+		c.ApiJsonReturn("读取File异常", 400, err)
 	}
 	buf := bytes.NewBuffer(nil)
 	if _, err = io.Copy(buf, file); err != nil {
@@ -688,13 +727,13 @@ func (c *UploadImageController) Post() {
 	encoder := base64.NewEncoder(base64.StdEncoding, bufWriter)
 	_, err = encoder.Write(content)
 	if err != nil {
-		return
+		c.ApiJsonReturn("base64解码失败", 400, err)
 	}
 	encodedString := string(buf.Bytes())
 	payloadMap := make(map[string]interface{})
 	payloadMap["base64"] = fmt.Sprintf("data:image/png;base64,%s", encodedString)
 	payload := strings.NewReader(collection.Collect(payloadMap).ToJson())
-	token := models.GetV8Token()
+	token := config.AppConfig.V8Token
 	if token == "" {
 		logs.Warn("Cannot get a valid V8 access token")
 		c.ApiJsonReturn("认证失败", 401, "")
@@ -702,17 +741,22 @@ func (c *UploadImageController) Post() {
 	enterpriseId := config.AppConfig.EnterpriseId
 	url := fmt.Sprintf("https://api.gitee.com/enterprises/%v/attach_files/upload_with_base_64?access_token=%s",
 	    enterpriseId, token)
-	req, _ := http.NewRequest("POST", url, payload)
+	req, err := http.NewRequest("POST", url, payload)
+	if err != nil {
+		logs.Error("Fail to send post request, err:", err)
+		c.ApiJsonReturn("发送请求异常", 400, err)
+	}
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		logs.Error("Fail to upload file, err:", err)
-		return
+		c.ApiJsonReturn("发送Post请求失败", 400, err)
 	}
 	defer func(Body io.ReadCloser) {
 		err = Body.Close()
 		if err != nil {
 			logs.Error("Fail to close response body of uploading file")
+		        c.ApiJsonReturn("Body关闭异常", 400, err)
 		}
 	}(resp.Body)
 	result, _ := io.ReadAll(resp.Body)

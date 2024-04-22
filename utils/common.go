@@ -11,6 +11,116 @@ import (
 	"strings"
 )
 
+type WebhookRequest struct {
+	Action		string		`json:"action"`
+	Issue		RequestIssue	`json:"issue"`
+	PullRequest	RequestPull	`json:"pull_request"`
+	Author		Author		`json:"author"`
+	Comment		Comment		`json:"comment"`
+}
+
+type RequestIssue struct {
+	ResponseIssue
+}
+
+type RequestPull struct {
+	ResponsePull
+}
+
+type ResponsePull struct {
+	HtmlUrl		string			`json:"html_url"`
+	State		string			`json:"state"`
+	CreatedAt	string			`json:"created_at"`
+	UpdatedAt	string			`json:"updated_at"`
+	Title		string			`json:"title"`
+	Body		string			`json:"body"`
+	Labels		[]ResponsePullLabel	`json:"labels"`
+	Assignees	[]ResponsePullAssignee	`json:"assignees"`
+	Draft		bool			`json:"draft"`
+	MergeAble	bool			`json:"mergeable"`
+	User		ResponsePullUser	`json:"user"`
+	Base		ResponsePullBase	`json:"base"`
+}
+
+type ResponsePullLabel struct {
+	Name	string	`json:"name"`
+	Color	string	`json:"color"`
+	Id	float64	`json:"id"`
+}
+
+type ResponsePullAssignee struct {
+	Login	string	`json:"login"`
+}
+
+type ResponsePullUser struct {
+	Login	string	`json:"login"`
+}
+
+type ResponsePullBase struct {
+	Ref	string	`json:"ref"`
+}
+
+type ResponseIssue struct {
+	Repository		ResponseIssueRepository	 `json:"repository"`
+	HtmlUrl			string			 `json:"html_url"`
+	User			ResponseIssueUser	 `json:"user"`
+	Number			string			 `json:"number"`
+	State			string			 `json:"state"`
+	IssueType		string			 `json:"issue_type"`
+	IssueStateDetail	ResponseIssueStateDetail `json:"issue_state_detail"`
+	CreatedAt		string			 `json:"created_at"`
+	UpdatedAt		string			 `json:"updated_at"`
+	Milestone		ResponseIssueMilestone	 `json:"milestone"`
+	Assignee		ResponseIssueAssignee	 `json:"assignee"`
+	Title			string			 `json:"title"`
+	Description		string			 `json:"body"`
+	Labels			[]ResponseIssueLabel	 `json:"labels"`
+	Priority		float64			 `json:"priority"`
+	Branch			string			 `json:"branch"`
+}
+
+type ResponseIssueRepository struct {
+	FullName	string	`json:"full_name"`
+}
+
+type ResponseIssueUser struct {
+	Login	string	`json:"login"`
+}
+
+type ResponseIssueStateDetail struct {
+	Title	string	`json:"title"`
+}
+
+type ResponseIssueMilestone struct {
+	Title	string	`json:"title"`
+}
+
+type ResponseIssueAssignee struct {
+	Login	string	`json:"login"`
+}
+
+type ResponseIssueLabel struct {
+	Name	string	`json:"name"`
+	Color	string	`json:"color"`
+	Id	float64	`json:"id"`
+}
+
+type Author struct {
+	Login	string	`json:"login"`
+}
+
+type Comment struct {
+	Body	string	`json:"body"`
+}
+
+type ResponseRepoDir struct {
+	Tree	[]ResponseRepoTree	`json:"tree"`
+}
+
+type ResponseRepoTree struct {
+	Path	string	`json:"path"`
+}
+
 func JsonToSlice(str string) []map[string]interface{} {
 	var temSlice []map[string]interface{}
 	err := json.Unmarshal([]byte(str), &temSlice)
@@ -52,17 +162,19 @@ func GetSigsMapping() (map[string][]string, map[string]string) {
 		logs.Error("Fail to close response body of getting sigs mapping, err:", err)
 		return nil, nil
 	}
-	treeMap := JsonToMap(string(body))
-	if treeMap == nil {
+	var rrd ResponseRepoDir
+	err = json.Unmarshal(body, &rrd)
+	if err != nil {
+		logs.Error("Fail to unmarshal response to json, err:", err)
 		return nil, nil
 	}
 	sigs := map[string][]string{}
 	repos := map[string]string{}
-	for _, value := range treeMap["tree"].([]interface{}) {
-		path := value.(map[string]interface{})["path"]
-		pathSlices := strings.Split(path.(string), "/")
-		if len(pathSlices) == 5 && strings.HasPrefix(path.(string), "sig") &&
-			strings.HasSuffix(path.(string), ".yaml") {
+	for _, tree := range rrd.tree {
+		path := tree.Path
+		pathSlices := strings.Split(path, "/")
+		if len(pathSlices) == 5 && strings.HasPrefix(path, "sig") &&
+			strings.HasSuffix(path, ".yaml") {
 			sigName := pathSlices[1]
 			repoName := pathSlices[2] + "/" + pathSlices[4][:len(pathSlices[4])-5]
 			repos[repoName] = sigName

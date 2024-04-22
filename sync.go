@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/orm"
 	_ "github.com/go-sql-driver/mysql"
 	"io"
 	"issue_pr_board/config"
+	_ "issue_pr_board/config"
 	"issue_pr_board/controllers"
 	"issue_pr_board/models"
 	_ "issue_pr_board/models"
@@ -41,48 +43,47 @@ func SyncEnterprisePulls() error {
 		body, _ := io.ReadAll(resp.Body)
 		err = resp.Body.Close()
 		if err != nil {
-			logs.Error("Fail to close response body of enterprise pull requests, err：", err)
+			logs.Error("Fail to close response body of enterprise pull requests, err:", err)
 			return err
 		}
 		if len(string(body)) == 2 {
 			break
 		}
-		pullsSlice := utils.JsonToSlice(string(body))
-		if pullsSlice == nil {
-			return nil
+		var rps []utils.ResponsePull
+		err = json.Unmarshal(body, &rps)
+		if err != nil {
+			logs.Error("Fail to unmarshal response to json, err:", err)
+			return err
 		}
-		for _, pull := range pullsSlice {
-			htmlUrl := pull["html_url"].(string)
+		for _, pull := range rps {
+			htmlUrl := pull.HtmlUrl
 			org := strings.Split(htmlUrl, "/")[3]
 			if org != "src-openeuler" && org != "openeuler" {
 				continue
 			}
 			repo := strings.Split(htmlUrl, "/")[4]
 			fullName := org + "/" + repo
-			state := pull["state"].(string)
-			ref := pull["base"].(map[string]interface{})["ref"].(string)
-			author := pull["user"].(map[string]interface{})["login"].(string)
-			createdAt := pull["created_at"].(string)
-			updatedAt := pull["updated_at"].(string)
+			state := pull.State
+			ref := pull.Base.Ref
+			author := pull.User.Login
+			createdAt := pull.CreatedAt
+			updatedAt := pull.UpdatedAt
 			sig := utils.GetSigByRepo(repos, fullName)
-			title := pull["title"].(string)
-			description := pull["body"]
-			if description == nil {
-				description = ""
-			}
-			description = base64.StdEncoding.EncodeToString([]byte(description.(string)))
-			labels := pull["labels"]
-			assignees := pull["assignees"]
-			draft := pull["draft"]
-			mergeable := pull["mergeable"]
+			title := pull.Title
+			description := pull.Body
+			description = base64.StdEncoding.EncodeToString([]byte(description))
+			labels := pull.Labels
+			assignees := pull.Assignees
+			draft := pull.Draft
+			mergeable := pull.MergeAble
 			labelsSlice := make([]string, 0)
 			assigneesSlice := make([]string, 0)
 			if labels != nil {
-				for _, label := range labels.([]interface{}) {
+				for _, label := range labels {
 					var lb models.Label
-					lb.Name = label.(map[string]interface{})["name"].(string)
-					lb.Color = label.(map[string]interface{})["color"].(string)
-					lb.UniqueId = label.(map[string]interface{})["id"].(float64)
+					lb.Name = label.Name
+					lb.Color = label.Color
+					lb.UniqueId = label.Id
 					if models.SearchLabel(lb.Name) {
 						o := orm.NewOrm()
 						qs := o.QueryTable("label")
@@ -100,12 +101,12 @@ func SyncEnterprisePulls() error {
 							logs.Error("Insert label failed, err:", err)
 						}
 					}
-					labelsSlice = append(labelsSlice, label.(map[string]interface{})["name"].(string))
+					labelsSlice = append(labelsSlice, label.Name)
 				}
 			}
 			if assignees != nil {
-				for _, assignee := range assignees.([]interface{}) {
-					assigneesSlice = append(assigneesSlice, assignee.(map[string]interface{})["login"].(string))
+				for _, assignee := range assignees {
+					assigneesSlice = append(assigneesSlice, assignee.Login)
 				}
 			}
 			var tp models.Pull
@@ -120,10 +121,10 @@ func SyncEnterprisePulls() error {
 			tp.CreatedAt = utils.FormatTime(createdAt)
 			tp.UpdatedAt = utils.FormatTime(updatedAt)
 			tp.Title = title
-			tp.Description = description.(string)
+			tp.Description = description
 			tp.Labels = strings.Join(labelsSlice, ",")
-			tp.Draft = draft.(bool)
-			tp.Mergeable = mergeable.(bool)
+			tp.Draft = draft
+			tp.Mergeable = mergeable
 			if controllers.SearchPullRecord(htmlUrl) {
 				o := orm.NewOrm()
 				qs := o.QueryTable("pull")
@@ -189,59 +190,44 @@ func SyncEnterpriseIssues() error {
 		if len(string(body)) == 2 {
 			break
 		}
-		issuesSlice := utils.JsonToSlice(string(body))
-		if issuesSlice == nil {
-			return nil
+		var ris []utils.ResponseIssue
+		err = json.Unmarshal(body, &ris)
+		if err != nil {
+			logs.Error("Fail to unmarshal response to json, err:", err)
+			return err
 		}
-		for _, issue := range issuesSlice {
-			repository := issue["repository"]
-			if repository == nil {
-				continue
-			}
-			htmlUrl := issue["html_url"].(string)
-			fullName := issue["repository"].(map[string]interface{})["full_name"].(string)
+		for _, issue := range ris {
+			htmlUrl := issue.HtmlUrl
+			fullName := issue.Repository.FullName
 			org := strings.Split(fullName, "/")[0]
 			if org != "src-openeuler" && org != "openeuler" {
 				continue
 			}
-			author := issue["user"].(map[string]interface{})["login"].(string)
-			number := issue["number"].(string)
-			state := issue["state"].(string)
-			issueType := issue["issue_type"].(string)
-			issueState := issue["issue_state_detail"].(map[string]interface{})["title"].(string)
-			createdAt := issue["created_at"].(string)
-			updatedAt := issue["updated_at"].(string)
+			author := issue.User.Login
+			number := issue.Number
+			state := issue.State
+			issueType := issue.IssueType
+			issueState := issue.IssueStateDetail.Title
+			createdAt := issue.CreatedAt
+			updatedAt := issue.UpdatedAt
 			sig := utils.GetSigByRepo(repos, fullName)
-			ms := issue["milestone"]
-			milestone := ""
-			if ms != nil {
-				milestone = ms.(map[string]interface{})["title"].(string)
-			}
-			assignee := issue["assignee"]
-			assigneeLogin := ""
-			if assignee != nil {
-				assigneeLogin = assignee.(map[string]interface{})["login"].(string)
-			}
-			title := issue["title"].(string)
-			description := issue["body"]
-			if description == nil {
-				description = ""
-			}
-			description = base64.StdEncoding.EncodeToString([]byte(description.(string)))
-			labels := issue["labels"]
-			priorityNum := issue["priority"]
-			priority := controllers.GetIssuePriority(priorityNum.(float64))
-			branch := issue["branch"]
-			if branch == nil {
-				branch = ""
-			}
+			milestone := issue.Milestone
+			assignee := issue.Assignee
+			assigneeLogin := assignee.Login
+			title := issue.Title
+			description := issue.Description
+			description = base64.StdEncoding.EncodeToString([]byte(description))
+			labels := issue.Labels
+			priorityNum := issue.Priority
+			priority := controllers.GetIssuePriority(priorityNum)
+			branch := issue.Branch
 			tags := make([]string, 0)
 			if labels != nil {
-				for _, label := range labels.([]interface{}) {
+				for _, label := range labels {
 					var lb models.Label
-					lb.Name = label.(map[string]interface{})["name"].(string)
-					lb.Color = label.(map[string]interface{})["color"].(string)
-					lb.UniqueId = label.(map[string]interface{})["id"].(float64)
+					lb.Name = label.Name
+					lb.Color = label.Color
+					lb.UniqueId = label.Id
 					if models.SearchLabel(lb.Name) {
 						o := orm.NewOrm()
 						qs := o.QueryTable("label")
@@ -259,7 +245,7 @@ func SyncEnterpriseIssues() error {
 							logs.Error("Insert label failed, err:", err)
 						}
 					}
-					tags = append(tags, label.(map[string]interface{})["name"].(string))
+					tags = append(tags, label.Name)
 				}
 			}
 			var ti models.Issue
@@ -276,11 +262,11 @@ func SyncEnterpriseIssues() error {
 			ti.CreatedAt = utils.FormatTime(createdAt)
 			ti.UpdatedAt = utils.FormatTime(updatedAt)
 			ti.Title = title
-			ti.Description = description.(string)
+			ti.Description = description
 			ti.Priority = priority
 			ti.Labels = strings.Join(tags, ",")
-			ti.Branch = branch.(string)
-			ti.Milestone = milestone
+			ti.Branch = branch
+			ti.Milestone = milestone.Title
 			issueExists := controllers.SearchIssueRecord(number)
 			if issueExists == true {
 				o := orm.NewOrm()
@@ -362,6 +348,10 @@ func SyncEnterpriseRepos() error {
 	return nil
 }
 
+type ResponsePullBranch struct {
+	Name	string	`json:"name"`
+}
+
 func getRepoBranches(repo string) string {
 	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/branches?access_token=%v", repo, token)
 	resp, err := http.Get(url)
@@ -379,17 +369,27 @@ func getRepoBranches(repo string) string {
 		logs.Error("Fail to close response body of repo branches, err:", err)
 		return ""
 	}
-	branchesSlice := utils.JsonToSlice(string(body))
+	var rbs []ResponsePullBranch
+	err = json.Unmarshal(body, &rbs)
+	if err != nil {
+		logs.Error("Fail to unmarshal response to json, err:", err)
+		return ""
+	}
 	res := make([]string, 0)
-	for _, branchItem := range branchesSlice {
-		branch := branchItem["name"]
-		res = append(res, branch.(string))
+	for _, branchItem := range rbs {
+		branch := branchItem.Name
+		res = append(res, branch)
 	}
 	return strings.Join(res, ",")
 }
 
+type ResponsePullCollaborator struct {
+	Login	string	`json:"login"`
+}
+
 func getRepoReviewers(repo string) string {
-	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/collaborators?access_token=%v&page=1&per_page=100", repo, token)
+	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/collaborators?access_token=%v&page=1&per_page=100",
+	    repo, token)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get repo members, err：", err)
@@ -405,12 +405,17 @@ func getRepoReviewers(repo string) string {
 		logs.Error("Fail to close response body of repo members, err:", err)
 		return ""
 	}
-	membersSlice := utils.JsonToSlice(string(body))
+	var rcs []ResponsePullCollaborator
+	err = json.Unmarshal(body, &rcs)
+	if err != nil {
+		logs.Error("Fail to unmarshal response to json, err:", err)
+		return ""
+	}
 	res := make([]string, 0)
-	for _, memberItem := range membersSlice {
-		member := memberItem["login"]
+	for _, memberItem := range rcs {
+		member := memberItem.Login
 		if member != "openeuler-ci-bot" {
-			res = append(res, member.(string))
+			res = append(res, member)
 		}
 	}
 	return strings.Join(res, ",")

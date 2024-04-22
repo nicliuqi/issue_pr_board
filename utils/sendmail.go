@@ -91,6 +91,10 @@ func loadTemplate(path string, data interface{}) string {
 		return ""
 	}
 	renderString, err := renderTemplate(tmpl, data)
+	if err != nil {
+		logs.Error(err)
+		return ""
+	}
 	return renderString
 }
 

@@ -13,12 +13,11 @@ type appConfig struct {
 	DBPort		string	`json:"db_port"`
 	DBUsername	string	`json:"db_username"`
 	EnterpriseId	string	`json:"enterprise_id"`
-	QueryToken	string	`json:"query_token"`
 	SMTPHost	string	`json:"smtp_host"`
 	SMTPPort	string	`json:"smtp_port"`
 	SMTPUsername	string	`json:"smtp_username"`
 	SMTPPassword	string	`json:"smtp_password"`
-	V8Url		string	`json:"v8_url"`
+	V8Token		string	`json:"v8_token"`
 	VerifyInterval	int	`json:"verify_interval"`
 	VerifyExpire	int	`json:"verify_expire"`
 }

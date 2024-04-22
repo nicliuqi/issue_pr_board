@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/orm"
@@ -18,9 +19,21 @@ type HooksController struct {
 	BaseController
 }
 
-func HandleIssueEvent(reqBody map[string]interface{}) {
-	action := reqBody["action"].(string)
-	number := reqBody["issue"].(map[string]interface{})["number"].(string)
+func HandleIssueEvent(r *http.Request) {
+	reqBody, err := io.ReadAll(r.Body)
+	err = r.Body.Close()
+	if err != nil {
+		logs.Error("Fail to close response body of handling issue events, err:", err)
+		return
+	}
+	var req utils.WebhookRequest
+	err = json.Unmarshal(reqBody, &req)
+	if err != nil {
+		logs.Error("Fail to unmarshal response to json, err:", err)
+		return
+	}
+	action := req.Action
+	number := req.Issue.Number
 	if action == "delete" {
 		o := orm.NewOrm()
 		deleteSql := fmt.Sprintf("delete from issue where number='%s'", number)
@@ -54,54 +67,41 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 		logs.Error("Fail to close response body of the issue, err:", err)
 		return
 	}
-	issue := utils.JsonToMap(string(body))
-	repository := issue["repository"]
-	if repository == nil {
+	var issue utils.ResponseIssue
+	err = json.Unmarshal(body, &issue)
+	if err != nil {
+		logs.Error("Fail to unmarshal response to json, err:", err)
 		return
 	}
-	htmlUrl := issue["html_url"].(string)
-	fullName := issue["repository"].(map[string]interface{})["full_name"].(string)
+	htmlUrl := issue.HtmlUrl
+	fullName := issue.Repository.FullName
 	org := strings.Split(fullName, "/")[0]
 	if org != "src-openeuler" && org != "openeuler" {
 		return
 	}
-	author := issue["user"].(map[string]interface{})["login"].(string)
-	state := issue["state"].(string)
-	issueType := issue["issue_type"].(string)
-	issueState := issue["issue_state_detail"].(map[string]interface{})["title"].(string)
-	createdAt := issue["created_at"].(string)
-	updatedAt := issue["updated_at"].(string)
+	author := issue.User.Login
+	state := issue.State
+	issueType := issue.IssueType
+	issueState := issue.IssueStateDetail.Title
+	createdAt := issue.CreatedAt
+	updatedAt := issue.UpdatedAt
 	sig := utils.GetSigByRepo(repos, fullName)
-	ms := issue["milestone"]
-	milestone := ""
-	if ms != nil {
-		milestone = ms.(map[string]interface{})["title"].(string)
-	}
-	assignee := issue["assignee"]
-	assigneeLogin := ""
-	if assignee != nil {
-		assigneeLogin = assignee.(map[string]interface{})["login"].(string)
-	}
-	title := issue["title"].(string)
-	description := issue["body"]
-	if description == nil {
-		description = ""
-	}
-	description = base64.StdEncoding.EncodeToString([]byte(description.(string)))
-	labels := issue["labels"]
-	priorityNum := issue["priority"]
-	priority := GetIssuePriority(priorityNum.(float64))
-	branch := issue["branch"]
-	if branch == nil {
-		branch = ""
-	}
+	milestone := issue.Milestone
+	assigneeLogin := issue.Assignee
+	title := issue.Title
+	description := issue.Description
+	description = base64.StdEncoding.EncodeToString([]byte(description))
+	labels := issue.Labels
+	priorityNum := issue.Priority
+	priority := GetIssuePriority(priorityNum)
+	branch := issue.Branch
 	tags := make([]string, 0)
 	if labels != nil {
-		for _, label := range labels.([]interface{}) {
+		for _, label := range labels {
 			var lb models.Label
-			lb.Name = label.(map[string]interface{})["name"].(string)
-			lb.Color = label.(map[string]interface{})["color"].(string)
-			lb.UniqueId = label.(map[string]interface{})["id"].(float64)
+			lb.Name = label.Name
+			lb.Color = label.Color
+			lb.UniqueId = label.Id
 			if models.SearchLabel(lb.Name) {
 				o := orm.NewOrm()
 				qs := o.QueryTable("label")
@@ -119,7 +119,7 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 					logs.Error("Insert label failed, err:", err)
 				}
 			}
-			tags = append(tags, label.(map[string]interface{})["name"].(string))
+			tags = append(tags, label.Name)
 		}
 	}
 	var ti models.Issue
@@ -132,15 +132,15 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 	ti.IssueType = issueType
 	ti.IssueState = issueState
 	ti.Author = author
-	ti.Assignee = assigneeLogin
+	ti.Assignee = assigneeLogin.Login
 	ti.CreatedAt = utils.FormatTime(createdAt)
 	ti.UpdatedAt = utils.FormatTime(updatedAt)
 	ti.Title = title
-	ti.Description = description.(string)
+	ti.Description = description
 	ti.Priority = priority
 	ti.Labels = strings.Join(tags, ",")
-	ti.Branch = branch.(string)
-	ti.Milestone = milestone
+	ti.Branch = branch
+	ti.Milestone = milestone.Title
 	issueExists := SearchIssueRecord(number)
 	if issueExists == true {
 		o := orm.NewOrm()
@@ -173,11 +173,11 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 			return
 		} else {
 			if action == "comment" {
-				commenterId := reqBody["author"].(map[string]interface{})["login"].(string)
+				commenterId := req.Author.Login
 				if commenterId == "openeuler-ci-bot" {
 					return
 				}
-				commentBody := reqBody["comment"].(map[string]interface{})["body"].(string)
+				commentBody := req.Comment.Body
 				ep := utils.EmailParams{Receiver: item.Reporter, Commenter: commenterId, Number: number, Title: title,
 				    Link: htmlUrl, Body: commentBody}
 				err = utils.SendCommentAttentionEmail(ep)
@@ -203,13 +203,25 @@ func HandleIssueEvent(reqBody map[string]interface{}) {
 	}
 }
 
-func HandlePullEvent(reqBody map[string]interface{}) {
+func HandlePullEvent(r *http.Request) {
+	reqBody, err := io.ReadAll(r.Body)
+	err = r.Body.Close()
+	if err != nil {
+		logs.Error("Fail to close response body of handling pull events, err:", err)
+		return
+	}
+	var req utils.WebhookRequest
+	err = json.Unmarshal(reqBody, &req)
+	if err != nil {
+		logs.Error("Fail to unmarshal response to json, err:", err)
+		return
+	}
 	_, repos := utils.GetSigsMapping()
 	if repos == nil {
 		logs.Error("Fail to get sigs mapping.")
 		return
 	}
-	htmlUrl := reqBody["pull_request"].(map[string]interface{})["html_url"].(string)
+	htmlUrl := req.PullRequest.HtmlUrl
 	org := strings.Split(htmlUrl, "/")[3]
 	if org != "src-openeuler" && org != "openeuler" {
 		return
@@ -234,31 +246,33 @@ func HandlePullEvent(reqBody map[string]interface{}) {
 		logs.Error("Fail to close response body of the pull request, err：", err)
 		return
 	}
-	pull := utils.JsonToMap(string(body))
-	state := pull["state"].(string)
-	ref := pull["base"].(map[string]interface{})["ref"].(string)
-	author := pull["user"].(map[string]interface{})["login"].(string)
-	createdAt := pull["created_at"].(string)
-	updatedAt := pull["updated_at"].(string)
-	sig := utils.GetSigByRepo(repos, fullName)
-	title := pull["title"].(string)
-	description := pull["body"]
-	if description == nil {
-		description = ""
+	var pull utils.ResponsePull
+	err = json.Unmarshal(body, &pull)
+	if err != nil {
+		logs.Error("Fail to unmarshal response to json, err:", err)
+		return
 	}
-	description = base64.StdEncoding.EncodeToString([]byte(description.(string)))
-	labels := pull["labels"]
-	assignees := pull["assignees"]
-	draft := pull["draft"]
-	mergeable := pull["mergeable"]
+	state := pull.State
+	ref := pull.Base.Ref
+	author := pull.User.Login
+	createdAt := pull.CreatedAt
+	updatedAt := pull.UpdatedAt
+	sig := utils.GetSigByRepo(repos, fullName)
+	title := pull.Title
+	description := pull.Body
+	description = base64.StdEncoding.EncodeToString([]byte(description))
+	labels := pull.Labels
+	assignees := pull.Assignees
+	draft := pull.Draft
+	mergeable := pull.MergeAble
 	labelsSlice := make([]string, 0)
 	assigneesSlice := make([]string, 0)
 	if labels != nil {
-		for _, label := range labels.([]interface{}) {
+		for _, label := range labels {
 			var lb models.Label
-			lb.Name = label.(map[string]interface{})["name"].(string)
-			lb.Color = label.(map[string]interface{})["color"].(string)
-			lb.UniqueId = label.(map[string]interface{})["id"].(float64)
+			lb.Name = label.Name
+			lb.Color = label.Color
+			lb.UniqueId = label.Id
 			if models.SearchLabel(lb.Name) {
 				o := orm.NewOrm()
 				qs := o.QueryTable("label")
@@ -276,12 +290,12 @@ func HandlePullEvent(reqBody map[string]interface{}) {
 					logs.Error("Insert label failed, err:", err)
 				}
 			}
-			labelsSlice = append(labelsSlice, label.(map[string]interface{})["name"].(string))
+			labelsSlice = append(labelsSlice, label.Name)
 		}
 	}
 	if assignees != nil {
-		for _, assignee := range assignees.([]interface{}) {
-			assigneesSlice = append(assigneesSlice, assignee.(map[string]interface{})["login"].(string))
+		for _, assignee := range assignees {
+			assigneesSlice = append(assigneesSlice, assignee.Login)
 		}
 	}
 	var tp models.Pull
@@ -296,10 +310,10 @@ func HandlePullEvent(reqBody map[string]interface{}) {
 	tp.CreatedAt = utils.FormatTime(createdAt)
 	tp.UpdatedAt = utils.FormatTime(updatedAt)
 	tp.Title = title
-	tp.Description = description.(string)
+	tp.Description = description
 	tp.Labels = strings.Join(labelsSlice, ",")
-	tp.Draft = draft.(bool)
-	tp.Mergeable = mergeable.(bool)
+	tp.Draft = draft
+	tp.Mergeable = mergeable
 	if SearchPullRecord(htmlUrl) {
 		o := orm.NewOrm()
 		qs := o.QueryTable("pull")
@@ -343,17 +357,17 @@ func (c *HooksController) Post() {
 	reqBody := collection.Collect(string(body)).ToMap()
 	switch {
 	case collection.Collect(action).Contains("Issue Hook"):
-		HandleIssueEvent(reqBody)
+		HandleIssueEvent(c.Ctx.Request)
 	case collection.Collect(action).Contains("Merge Request Hook"):
-		HandlePullEvent(reqBody)
+		HandlePullEvent(c.Ctx.Request)
 	default:
 		issue, ok := reqBody["issue"]
 		if ok && issue != nil {
-			HandleIssueEvent(reqBody)
+			HandleIssueEvent(c.Ctx.Request)
 		}
 		pr, ok2 := reqBody["pull_request"]
 		if ok2 && pr != nil {
-			HandlePullEvent(reqBody)
+			HandlePullEvent(c.Ctx.Request)
 		}
 		return
 	}
