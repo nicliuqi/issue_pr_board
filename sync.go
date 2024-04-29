@@ -4,8 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/astaxie/beego/logs"
-	"github.com/astaxie/beego/orm"
+	"github.com/beego/beego/v2/client/orm"
+	"github.com/beego/beego/v2/core/logs"
 	_ "github.com/go-sql-driver/mysql"
 	"io"
 	"issue_pr_board/config"
@@ -349,7 +349,7 @@ func SyncEnterpriseRepos() error {
 }
 
 type ResponsePullBranch struct {
-	Name	string	`json:"name"`
+	Name string `json:"name"`
 }
 
 func getRepoBranches(repo string) string {
@@ -361,6 +361,7 @@ func getRepoBranches(repo string) string {
 	}
 	if resp.StatusCode != 200 {
 		logs.Error("Get unexpected response when getting repo branches, status:", resp.Status)
+		logs.Info(repo)
 		return ""
 	}
 	body, _ := io.ReadAll(resp.Body)
@@ -384,12 +385,12 @@ func getRepoBranches(repo string) string {
 }
 
 type ResponsePullCollaborator struct {
-	Login	string	`json:"login"`
+	Login string `json:"login"`
 }
 
 func getRepoReviewers(repo string) string {
 	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/collaborators?access_token=%v&page=1&per_page=100",
-	    repo, token)
+		repo, token)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get repo members, err：", err)
@@ -397,6 +398,7 @@ func getRepoReviewers(repo string) string {
 	}
 	if resp.StatusCode != 200 {
 		logs.Error("Get unexpected response when getting repo members, status:", resp.Status)
+		logs.Info(repo)
 		return ""
 	}
 	body, _ := io.ReadAll(resp.Body)

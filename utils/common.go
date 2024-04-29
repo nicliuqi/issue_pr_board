@@ -3,8 +3,7 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/astaxie/beego/logs"
-	"github.com/chenhg5/collection"
+	"github.com/beego/beego/v2/core/logs"
 	"io"
 	"issue_pr_board/config"
 	"net/http"
@@ -12,11 +11,11 @@ import (
 )
 
 type WebhookRequest struct {
-	Action		string		`json:"action"`
-	Issue		RequestIssue	`json:"issue"`
-	PullRequest	RequestPull	`json:"pull_request"`
-	Author		Author		`json:"author"`
-	Comment		Comment		`json:"comment"`
+	Action      string       `json:"action"`
+	Issue       RequestIssue `json:"issue"`
+	PullRequest RequestPull  `json:"pull_request"`
+	Author      Author       `json:"author"`
+	Comment     Comment      `json:"comment"`
 }
 
 type RequestIssue struct {
@@ -28,108 +27,97 @@ type RequestPull struct {
 }
 
 type ResponsePull struct {
-	HtmlUrl		string			`json:"html_url"`
-	State		string			`json:"state"`
-	CreatedAt	string			`json:"created_at"`
-	UpdatedAt	string			`json:"updated_at"`
-	Title		string			`json:"title"`
-	Body		string			`json:"body"`
-	Labels		[]ResponsePullLabel	`json:"labels"`
-	Assignees	[]ResponsePullAssignee	`json:"assignees"`
-	Draft		bool			`json:"draft"`
-	MergeAble	bool			`json:"mergeable"`
-	User		ResponsePullUser	`json:"user"`
-	Base		ResponsePullBase	`json:"base"`
+	HtmlUrl   string                 `json:"html_url"`
+	State     string                 `json:"state"`
+	CreatedAt string                 `json:"created_at"`
+	UpdatedAt string                 `json:"updated_at"`
+	Title     string                 `json:"title"`
+	Body      string                 `json:"body"`
+	Labels    []ResponsePullLabel    `json:"labels"`
+	Assignees []ResponsePullAssignee `json:"assignees"`
+	Draft     bool                   `json:"draft"`
+	MergeAble bool                   `json:"mergeable"`
+	User      ResponsePullUser       `json:"user"`
+	Base      ResponsePullBase       `json:"base"`
 }
 
 type ResponsePullLabel struct {
-	Name	string	`json:"name"`
-	Color	string	`json:"color"`
-	Id	float64	`json:"id"`
+	Name  string  `json:"name"`
+	Color string  `json:"color"`
+	Id    float64 `json:"id"`
 }
 
 type ResponsePullAssignee struct {
-	Login	string	`json:"login"`
+	Login string `json:"login"`
 }
 
 type ResponsePullUser struct {
-	Login	string	`json:"login"`
+	Login string `json:"login"`
 }
 
 type ResponsePullBase struct {
-	Ref	string	`json:"ref"`
+	Ref string `json:"ref"`
 }
 
 type ResponseIssue struct {
-	Repository		ResponseIssueRepository	 `json:"repository"`
-	HtmlUrl			string			 `json:"html_url"`
-	User			ResponseIssueUser	 `json:"user"`
-	Number			string			 `json:"number"`
-	State			string			 `json:"state"`
-	IssueType		string			 `json:"issue_type"`
-	IssueStateDetail	ResponseIssueStateDetail `json:"issue_state_detail"`
-	CreatedAt		string			 `json:"created_at"`
-	UpdatedAt		string			 `json:"updated_at"`
-	Milestone		ResponseIssueMilestone	 `json:"milestone"`
-	Assignee		ResponseIssueAssignee	 `json:"assignee"`
-	Title			string			 `json:"title"`
-	Description		string			 `json:"body"`
-	Labels			[]ResponseIssueLabel	 `json:"labels"`
-	Priority		float64			 `json:"priority"`
-	Branch			string			 `json:"branch"`
+	Repository       ResponseIssueRepository  `json:"repository"`
+	HtmlUrl          string                   `json:"html_url"`
+	User             ResponseIssueUser        `json:"user"`
+	Number           string                   `json:"number"`
+	State            string                   `json:"state"`
+	IssueType        string                   `json:"issue_type"`
+	IssueStateDetail ResponseIssueStateDetail `json:"issue_state_detail"`
+	CreatedAt        string                   `json:"created_at"`
+	UpdatedAt        string                   `json:"updated_at"`
+	Milestone        ResponseIssueMilestone   `json:"milestone"`
+	Assignee         ResponseIssueAssignee    `json:"assignee"`
+	Title            string                   `json:"title"`
+	Description      string                   `json:"body"`
+	Labels           []ResponseIssueLabel     `json:"labels"`
+	Priority         float64                  `json:"priority"`
+	Branch           string                   `json:"branch"`
 }
 
 type ResponseIssueRepository struct {
-	FullName	string	`json:"full_name"`
+	FullName string `json:"full_name"`
 }
 
 type ResponseIssueUser struct {
-	Login	string	`json:"login"`
+	Login string `json:"login"`
 }
 
 type ResponseIssueStateDetail struct {
-	Title	string	`json:"title"`
+	Title string `json:"title"`
 }
 
 type ResponseIssueMilestone struct {
-	Title	string	`json:"title"`
+	Title string `json:"title"`
 }
 
 type ResponseIssueAssignee struct {
-	Login	string	`json:"login"`
+	Login string `json:"login"`
 }
 
 type ResponseIssueLabel struct {
-	Name	string	`json:"name"`
-	Color	string	`json:"color"`
-	Id	float64	`json:"id"`
+	Name  string  `json:"name"`
+	Color string  `json:"color"`
+	Id    float64 `json:"id"`
 }
 
 type Author struct {
-	Login	string	`json:"login"`
+	Login string `json:"login"`
 }
 
 type Comment struct {
-	Body	string	`json:"body"`
+	Body string `json:"body"`
 }
 
 type ResponseRepoDir struct {
-	Tree	[]ResponseRepoTree	`json:"tree"`
+	Tree []ResponseRepoTree `json:"tree"`
 }
 
 type ResponseRepoTree struct {
-	Path	string	`json:"path"`
-}
-
-func JsonToSlice(str string) []map[string]interface{} {
-	var temSlice []map[string]interface{}
-	err := json.Unmarshal([]byte(str), &temSlice)
-	if err != nil {
-		logs.Error(err)
-		logs.Error("Parse string to slice error, the string is:", str)
-		return nil
-	}
-	return collection.Collect(str).ToMapArray()
+	Path string `json:"path"`
 }
 
 func JsonToMap(str string) map[string]interface{} {
@@ -170,7 +158,7 @@ func GetSigsMapping() (map[string][]string, map[string]string) {
 	}
 	sigs := map[string][]string{}
 	repos := map[string]string{}
-	for _, tree := range rrd.tree {
+	for _, tree := range rrd.Tree {
 		path := tree.Path
 		pathSlices := strings.Split(path, "/")
 		if len(pathSlices) == 5 && strings.HasPrefix(path, "sig") &&
@@ -205,4 +193,17 @@ func CheckParams(param string) string {
 		}
 	}
 	return param
+}
+
+func ConvertStrSlice2Map(sl []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(sl))
+	for _, v := range sl {
+		set[v] = struct{}{}
+	}
+	return set
+}
+
+func InMap(m map[string]struct{}, s string) bool {
+	_, ok := m[s]
+	return ok
 }

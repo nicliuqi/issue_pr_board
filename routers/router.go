@@ -8,13 +8,13 @@
 package routers
 
 import (
-	"github.com/astaxie/beego"
+	beego "github.com/beego/beego/v2/server/web"
 	"issue_pr_board/controllers"
 )
 
 func init() {
-	beego.Router("/captcha/get", &controllers.GetCaptchaController{})
 	beego.Router("/captcha/check", &controllers.CheckCaptchaController{})
+	beego.Router("/captcha/get", &controllers.GetCaptchaController{})
 	beego.Router("/colors", &controllers.LabelsColorsController{})
 	beego.Router("/hooks", &controllers.HooksController{})
 	beego.Router("/image", &controllers.UploadImageController{})

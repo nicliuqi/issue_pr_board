@@ -1,13 +1,13 @@
 package controllers
 
 import (
-	"crypyo/rand"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/astaxie/beego"
-	"github.com/astaxie/beego/logs"
-	"github.com/astaxie/beego/orm"
+	"github.com/beego/beego/v2/client/orm"
+	"github.com/beego/beego/v2/core/logs"
+	beego "github.com/beego/beego/v2/server/web"
 	"io"
 	"issue_pr_board/config"
 	"issue_pr_board/models"
@@ -27,7 +27,11 @@ type GeneralResp struct {
 func genValidateCode(width int) string {
 	validateCode := ""
 	for i := 0; i < width; i++ {
-		randomInt, _ := rand.Int(rand.Reader, big.NewInt(10))
+		randomInt, err := rand.Int(rand.Reader, big.NewInt(10))
+		if err != nil {
+			logs.Error("Fail to generate validate code, err:", err)
+			return validateCode
+		}
 		validateCode += randomInt.String()
 	}
 	return validateCode
@@ -128,7 +132,7 @@ func (c *CheckCaptchaController) Post() {
 	if params.CaptchaType != "blockPuzzle" {
 		c.CustomJsonReturn(errorRes(errors.New("参数CaptchaType须为blockPuzzle")))
 	}
-	if params.Token == "" || params.PointJson == "" || params.CaptchaType == "" {
+	if params.Token == "" || params.PointJson == "" || params.CaptchaType == "" || params.Email == "" {
 		c.CustomJsonReturn(errorRes(errors.New("参数传递不完整")))
 	}
 	if err != nil {
@@ -218,7 +222,7 @@ func errorRes(err error) map[string]interface{} {
 	ret["repCode"] = "0001"
 	ret["repData"] = nil
 	ret["repMsg"] = err.Error()
-	ret["successRest"] = false
+	ret["successRes"] = false
 	return ret
 }
 
@@ -228,6 +232,6 @@ func errorVerifyRes(err error) map[string]interface{} {
 	ret["repCode"] = "0002"
 	ret["repData"] = nil
 	ret["repMsg"] = err.Error()
-	ret["successRest"] = false
+	ret["successRes"] = false
 	return ret
 }

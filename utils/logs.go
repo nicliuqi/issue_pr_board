@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/astaxie/beego/config"
-	"github.com/astaxie/beego/logs"
+	"github.com/beego/beego/v2/core/config"
+	"github.com/beego/beego/v2/core/logs"
 )
 
 func InitLogger() (err error) {
@@ -20,7 +20,7 @@ func InitLogger() (err error) {
 	}
 
 	logConf := make(map[string]interface{})
-	logConf["filename"] = BConfig.String("log::log_path")
+	logConf["filename"], _ = BConfig.String("log::log_path")
 	level, _ := BConfig.Int("log::log_level")
 	logConf["level"] = level
 	logConf["maxlines"] = maxlines

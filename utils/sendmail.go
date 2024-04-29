@@ -3,32 +3,32 @@ package utils
 import (
 	"bytes"
 	"fmt"
-	"github.com/astaxie/beego/logs"
-	"github.com/jordan-wright/email"
+	"github.com/beego/beego/v2/core/logs"
 	"html/template"
 	"issue_pr_board/config"
 	"net/smtp"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
 	CommentAttentionTemplate     = "templates/email/comment_attention.tmpl"
-	NewIssueNotifyTemplate	     = "templates/email/new_issue_notify.tmpl"
+	NewIssueNotifyTemplate       = "templates/email/new_issue_notify.tmpl"
 	StateChangeAttentionTemplate = "templates/email/state_change_attention.tmpl"
 	VerifyTemplate               = "templates/email/verify.tmpl"
 )
 
 type EmailParams struct {
-        Body      string
-        Code      string
-        Commenter string
-        Link      string
-        Number    string
-        Receiver  string
-        Repo      string
-        State     string
-        Title     string
+	Body      string
+	Code      string
+	Commenter string
+	Link      string
+	Number    string
+	Receiver  string
+	Repo      string
+	State     string
+	Title     string
 }
 
 func SendVerifyEmail(ep EmailParams) error {
@@ -99,26 +99,22 @@ func loadTemplate(path string, data interface{}) string {
 }
 
 func renderTemplate(tmpl *template.Template, data interface{}) (string, error) {
-        buf := new(bytes.Buffer)
-        err := tmpl.Execute(buf, data)
-        if err != nil {
-                return "", fmt.Errorf("failed to execute template")
-        }
-        return buf.String(), nil
+	buf := new(bytes.Buffer)
+	err := tmpl.Execute(buf, data)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute template")
+	}
+	return buf.String(), nil
 }
 
-func sendEmail(receiver string, subject string, htmlBody string) error {
-	username := config.AppConfig.SMTPUsername
-	passwd := config.AppConfig.SMTPPassword
-	host := config.AppConfig.SMTPHost
-	port := config.AppConfig.SMTPPort
-	em := email.NewEmail()
-	em.From = username
-	em.To = []string{receiver}
-	em.Subject = subject
-	em.HTML = []byte(htmlBody)
-	auth := smtp.PlainAuth("", username, passwd, host)
-	err := em.Send(fmt.Sprintf("%v:%v", host, port), auth)
+func sendEmail(receiver, subject, htmlBody string) error {
+	auth := smtp.PlainAuth("", config.AppConfig.SMTPUsername, config.AppConfig.SMTPPassword,
+		config.AppConfig.SMTPHost)
+	contentType := "Content-Type: text/html; charset=UTF-8"
+	msg := []byte("To: " + receiver + "\r\nFrom: " + config.AppConfig.SMTPSender + ">\r\nSubject: " + subject + "\r\n" +
+		contentType + "\r\n\r\n" + htmlBody)
+	err := smtp.SendMail(fmt.Sprintf("%v:%v", config.AppConfig.SMTPHost, config.AppConfig.SMTPPort), auth,
+		config.AppConfig.SMTPUsername, strings.Split(receiver, ";"), msg)
 	if err != nil {
 		return err
 	}

@@ -3,8 +3,8 @@ package controllers
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/astaxie/beego/logs"
-	"github.com/astaxie/beego/orm"
+	"github.com/beego/beego/v2/client/orm"
+	"github.com/beego/beego/v2/core/logs"
 	"io"
 	"issue_pr_board/config"
 	"issue_pr_board/models"

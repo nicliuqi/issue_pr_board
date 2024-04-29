@@ -10,8 +10,8 @@ import (
 
 var watermarkConfig = &config2.WatermarkConfig{
 	FontSize: 12,
-	Color:	  color.RGBA{R: 255, G: 255, B: 255, A: 255},
-	Text:	  "",
+	Color:    color.RGBA{R: 255, G: 255, B: 255, A: 255},
+	Text:     "",
 }
 var clickWordConfig = &config2.ClickWordConfig{
 	FontSize: 25,
@@ -19,7 +19,7 @@ var clickWordConfig = &config2.ClickWordConfig{
 }
 var blockPuzzleConfig = &config2.BlockPuzzleConfig{Offset: 10}
 var captchaConfig = config2.BuildConfig(constant.MemCacheKey, constant.DefaultResourceRoot, watermarkConfig,
-    clickWordConfig, blockPuzzleConfig, 2*60)
+	clickWordConfig, blockPuzzleConfig, 2*60)
 var Factory = service.NewCaptchaServiceFactory(captchaConfig)
 
 func InitCaptchaFactory() {

@@ -4,9 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/astaxie/beego/logs"
-	"github.com/astaxie/beego/orm"
-	"github.com/chenhg5/collection"
+	"github.com/beego/beego/v2/client/orm"
+	"github.com/beego/beego/v2/core/logs"
 	"io"
 	"issue_pr_board/config"
 	"issue_pr_board/models"
@@ -51,7 +50,7 @@ func HandleIssueEvent(r *http.Request) {
 		return
 	}
 	url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/issues/%v?access_token=%v", number,
-	    config.AppConfig.AccessToken)
+		config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get the issue, err：", err)
@@ -179,7 +178,7 @@ func HandleIssueEvent(r *http.Request) {
 				}
 				commentBody := req.Comment.Body
 				ep := utils.EmailParams{Receiver: item.Reporter, Commenter: commenterId, Number: number, Title: title,
-				    Link: htmlUrl, Body: commentBody}
+					Link: htmlUrl, Body: commentBody}
 				err = utils.SendCommentAttentionEmail(ep)
 				if err != nil {
 					logs.Error("Fail to send issue comment attention email, err:", err)
@@ -187,7 +186,7 @@ func HandleIssueEvent(r *http.Request) {
 			}
 			if action == "state_change" {
 				ep := utils.EmailParams{Receiver: item.Reporter, State: issueState, Number: number, Title: title,
-				    Link: htmlUrl}
+					Link: htmlUrl}
 				err = utils.SendStateChangeAttentionEmail(ep)
 				if err != nil {
 					logs.Error("Fail to send issue state change attention email, err:", err)
@@ -207,7 +206,7 @@ func HandlePullEvent(r *http.Request) {
 	reqBody, err := io.ReadAll(r.Body)
 	err = r.Body.Close()
 	if err != nil {
-		logs.Error("Fail to close response body of handling pull events, err:", err)
+		logs.Error("Fail to close response body of repo members, err:", err)
 		return
 	}
 	var req utils.WebhookRequest
@@ -230,7 +229,7 @@ func HandlePullEvent(r *http.Request) {
 	fullName := org + "/" + repo
 	number := strings.Split(htmlUrl, "/")[6]
 	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/pulls/%v?access_token=%v", fullName, number,
-            config.AppConfig.AccessToken)
+		config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get the pull request, err：", err)
@@ -350,25 +349,28 @@ func (c *HooksController) Post() {
 	_, ok := headers["X-Gitee-Event"]
 	if !ok {
 		logs.Warn("Notice a fake WebHook and ignore.")
-		return
+		c.ApiJsonReturn("Bad Request", 400, nil)
 	}
 	action := headers["X-Gitee-Event"]
 	body := c.Ctx.Input.RequestBody
-	reqBody := collection.Collect(string(body)).ToMap()
+	var webookRequest utils.WebhookRequest
+	err := json.Unmarshal(body, &webookRequest)
+	if err != nil {
+		logs.Error("Fail to unmarshal response to json, err:", err)
+		c.ApiJsonReturn("Bad Request", 400, err)
+	}
 	switch {
-	case collection.Collect(action).Contains("Issue Hook"):
+	case action[0] == "Issue Hook":
 		HandleIssueEvent(c.Ctx.Request)
-	case collection.Collect(action).Contains("Merge Request Hook"):
+	case action[0] == "Merge Request Hook":
 		HandlePullEvent(c.Ctx.Request)
 	default:
-		issue, ok := reqBody["issue"]
-		if ok && issue != nil {
+		if webookRequest.Issue.HtmlUrl != "" {
 			HandleIssueEvent(c.Ctx.Request)
 		}
-		pr, ok2 := reqBody["pull_request"]
-		if ok2 && pr != nil {
+		if webookRequest.PullRequest.HtmlUrl != "" {
 			HandlePullEvent(c.Ctx.Request)
 		}
-		return
+		c.ApiJsonReturn("OK", 200, nil)
 	}
 }

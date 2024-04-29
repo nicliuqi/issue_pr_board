@@ -2,10 +2,10 @@ package models
 
 import (
 	"fmt"
-	"github.com/astaxie/beego/logs"
-	"github.com/astaxie/beego/orm"
-	"github.com/chenhg5/collection"
-	"gopkg.in/yaml.v2"
+	"github.com/beego/beego/v2/client/orm"
+	"github.com/beego/beego/v2/core/logs"
+	"gopkg.in/yaml.v3"
+	"issue_pr_board/utils"
 	"os"
 	"path"
 	"reflect"
@@ -47,7 +47,7 @@ func searchIssueType(name string, platform string, organization string) (bool, i
 	var issueType IssueType
 	o := orm.NewOrm()
 	searchSql := fmt.Sprintf("select * from issue_type where name='%v' and platform='%v' and organization='%v'",
-	    name, platform, organization)
+		name, platform, organization)
 	err := o.Raw(searchSql).QueryRow(&issueType)
 	if err == orm.ErrNoRows {
 		return false, 0
@@ -69,7 +69,7 @@ func InitIssueType() {
 		for _, file := range files {
 			orgFiles = append(orgFiles, file.Name())
 		}
-		if !collection.Collect(orgFiles).Contains("issue_types.yaml") {
+		if !utils.InMap(utils.ConvertStrSlice2Map(orgFiles), "issue_types.yaml") {
 			continue
 		}
 		info := readIssueTypesInfo(path.Join("templates", "issues", organization.Name(), "issue_types.yaml"))
@@ -78,7 +78,7 @@ func InitIssueType() {
 		for _, i := range info {
 			issueType.Organization = organization.Name()
 			issueType.Name = i.Name
-			if collection.Collect(orgFiles).Contains(i.Name + ".md") {
+			if utils.InMap(utils.ConvertStrSlice2Map(orgFiles), i.Name+".md") {
 				templateFile := path.Join("templates", "issues", organization.Name(), i.Name+".md")
 				data, err := os.ReadFile(templateFile)
 				if err != nil {

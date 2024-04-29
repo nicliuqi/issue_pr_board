@@ -2,8 +2,7 @@ package controllers
 
 import (
 	"fmt"
-	"github.com/astaxie/beego/orm"
-	"github.com/chenhg5/collection"
+	"github.com/beego/beego/v2/client/orm"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
 	"sort"
@@ -222,7 +221,7 @@ func (c *PullsReposController) Get() {
 		sql = "select distinct repo from pull where sig != 'Private' order by repo"
 	} else {
 		sql = fmt.Sprintf("select distinct repo from pull where sig != 'Private' and sig = '%s' order by repo",
-		    sig)
+			sig)
 	}
 	count, err := o.Raw(sql).QueryRows(&pull)
 	if err != nil {
@@ -397,7 +396,7 @@ func (c *PullsAssigneesController) Get() {
 			continue
 		}
 		for _, j := range strings.Split(i.Assignees, ",") {
-			if collection.Collect(res).Contains(j) {
+			if utils.InMap(utils.ConvertStrSlice2Map(res), j) {
 				continue
 			}
 			if keyWord == "" {
@@ -450,7 +449,7 @@ func (c *PullsLabelsController) Get() {
 			continue
 		}
 		for _, j := range strings.Split(i.Labels, ",") {
-			if collection.Collect(res).Contains(j) {
+			if utils.InMap(utils.ConvertStrSlice2Map(res), j) {
 				continue
 			}
 			if keyWord == "" {

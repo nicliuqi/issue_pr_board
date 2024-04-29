@@ -6,12 +6,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/astaxie/beego/logs"
-	"github.com/astaxie/beego/orm"
-	"github.com/chenhg5/collection"
-	"gopkg.in/yaml.v2"
+	"github.com/beego/beego/v2/client/orm"
+	"github.com/beego/beego/v2/core/logs"
+	"gopkg.in/yaml.v3"
 	"io"
-	"iusse_pr_board/config"
+	"issue_pr_board/config"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
 	"mime/multipart"
@@ -257,18 +256,26 @@ type IssueNewController struct {
 }
 
 type NewIssueParams struct {
-	Email		string	`json:"email"`
-	Code		string	`json:"code"`
-	ProjectId	float64	`json:"project_id"`
-	Title		string	`json:"title"`
-	Description	string	`json:"description"`
-	IssueTypeId	int	`json:"issue_type_id"`
+	Email       string `json:"email"`
+	Code        string `json:"code"`
+	ProjectId   int    `json:"project_id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	IssueTypeId int    `json:"issue_type_id"`
 }
 
 type NewIssueResponse struct {
-	Id		float64	`json:"id"`
-	Ident		string	`json:"ident"`
-	IssueUrl	string	`json:"issue_url"`
+	Id       float64 `json:"id"`
+	Ident    string  `json:"ident"`
+	IssueUrl string  `json:"issue_url"`
+}
+
+type NewIssueRequestBody struct {
+	AccessToken string `json:"access_token"`
+	ProjectID   int    `json:"porject_id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	IssueTypeId int    `json:"issue_type_id"`
 }
 
 func (c *IssueNewController) Post() {
@@ -283,22 +290,27 @@ func (c *IssueNewController) Post() {
 	err = json.Unmarshal(reqBody, &params)
 	if err != nil {
 		logs.Error("Fail to unmarshal response to json, err:", err)
-		c.ApiJsonReturn("解析JSON异常", 400, err)
+		c.ApiJsonReturn("反解析JSON异常", 400, err)
 	}
 	addr := params.Email
 	code := params.Code
 	if !checkCode(addr, code) {
 		c.ApiJsonReturn("验证码错误", 400, "")
 	}
-	payloadMap := make(map[string]interface{})
-	payloadMap["access_token"] = config.AppConfig.V8Token
-	payloadMap["project_id"] = params.ProjectId
-	payloadMap["title"] = params.Title
-	payloadMap["description"] = params.Description
-	payloadMap["issue_type_id"] = params.IssueTypeId
+	var newIssueRequestBody NewIssueRequestBody
+	newIssueRequestBody.AccessToken = config.AppConfig.V8Token
+	newIssueRequestBody.ProjectID = params.ProjectId
+	newIssueRequestBody.Title = params.Title
+	newIssueRequestBody.Description = params.Description
+	newIssueRequestBody.IssueTypeId = params.IssueTypeId
+	requestBodyByte, err := json.Marshal(newIssueRequestBody)
+	if err != nil {
+		logs.Error("Fail to marshal request body, err:", err)
+		c.ApiJsonReturn("解析JSON异常", 400, err)
+	}
+	payload := strings.NewReader(string(requestBodyByte))
 	enterpriseId := config.AppConfig.EnterpriseId
 	url := fmt.Sprintf("https://api.gitee.com/enterprises/%v/issues", enterpriseId)
-	payload := strings.NewReader(collection.Collect(payloadMap).ToJson())
 	req, err := http.NewRequest("POST", url, payload)
 	if err != nil {
 		logs.Error("Fail to send post request, err:", err)
@@ -323,23 +335,23 @@ func (c *IssueNewController) Post() {
 	err = json.Unmarshal(content, &res)
 	if err != nil {
 		logs.Error("Fail to unmarshal response to json, err:", err)
-		c.ApiJsonReturn("解析JSON异常", 400, err)
+		c.ApiJsonReturn("反解析JSON异常", 400, err)
 	}
 	logs.Info("An issue has been created, ready to save the info")
 	issueId := res.Id
 	number := res.Ident
-	issueUrl := res.Issue_Url
+	issueUrl := res.IssueUrl
 	result := make(map[string]interface{})
 	result["issue_id"] = issueId
 	result["number"] = number
 	if !SearchIssueRecord(number) {
 		o := orm.NewOrm()
 		insertSql := fmt.Sprintf("insert into issue (state, number, reporter) values('open', '%s', '%s')",
-		    number, addr)
+			number, addr)
 		_, err = o.Raw(insertSql).Exec()
 		if err != nil {
 			logs.Error("Fail to create issue with reporter:", err)
-		        c.ApiJsonReturn("创建issue失败", 400, err)
+			c.ApiJsonReturn("创建issue失败", 400, err)
 		} else {
 			logs.Info("Save issue successfully:", number)
 		}
@@ -349,13 +361,13 @@ func (c *IssueNewController) Post() {
 		_, err = o.Raw(updateSql).Exec()
 		if err != nil {
 			logs.Error("Fail to update issue reporter:", err)
-		        c.ApiJsonReturn("更新issue失败", 400, err)
+			c.ApiJsonReturn("更新issue失败", 400, err)
 		} else {
 			logs.Info("Update issue successfully:", number)
 		}
 	}
 	cleanCode(addr, code)
-	go NewIssueNotify(int(params.ProjectId), number, issueUrl, params.Title)
+	go NewIssueNotify(params.ProjectId, number, issueUrl, params.Title)
 	c.ApiJsonReturn("创建成功", 201, result)
 }
 
@@ -552,7 +564,7 @@ func (c *MilestonesController) Get() {
 				continue
 			}
 			for _, j := range strings.Split(i.Milestone, ",") {
-				if collection.Collect(res).Contains(j) {
+				if utils.InMap(utils.ConvertStrSlice2Map(res), j) {
 					continue
 				}
 				if keyWord == "" {
@@ -604,7 +616,7 @@ func (c *LabelsController) Get() {
 				continue
 			}
 			for _, j := range strings.Split(i.Labels, ",") {
-				if collection.Collect(res).Contains(j) {
+				if utils.InMap(utils.ConvertStrSlice2Map(res), j) {
 					continue
 				}
 				if keyWord == "" {
@@ -701,6 +713,16 @@ type UploadImageController struct {
 	BaseController
 }
 
+type UploadImageRequestBody struct {
+	Base64 string `json:"base64"`
+}
+
+type UploadImageResponse struct {
+	Success bool   `json:"success"`
+	File    string `json:"file"`
+	Message string `json:"message"`
+}
+
 func (c *UploadImageController) Post() {
 	logs.Info("Ready to upload a image")
 	file, _, err := c.GetFile("file")
@@ -708,11 +730,11 @@ func (c *UploadImageController) Post() {
 		err = file.Close()
 		if err != nil {
 			logs.Error(err)
-		        c.ApiJsonReturn("关闭File异常", 400, err)
+			c.ApiJsonReturn("关闭File失败", 400, err)
 		}
 	}(file)
 	if err != nil {
-		c.ApiJsonReturn("读取File异常", 400, err)
+		c.ApiJsonReturn("读取File失败", 400, err)
 	}
 	buf := bytes.NewBuffer(nil)
 	if _, err = io.Copy(buf, file); err != nil {
@@ -730,9 +752,14 @@ func (c *UploadImageController) Post() {
 		c.ApiJsonReturn("base64解码失败", 400, err)
 	}
 	encodedString := string(buf.Bytes())
-	payloadMap := make(map[string]interface{})
-	payloadMap["base64"] = fmt.Sprintf("data:image/png;base64,%s", encodedString)
-	payload := strings.NewReader(collection.Collect(payloadMap).ToJson())
+	var uploadImageRequestBody UploadImageRequestBody
+	uploadImageRequestBody.Base64 = fmt.Sprintf("data:image/png;base64,%s", encodedString)
+	requestBodyByte, err := json.Marshal(uploadImageRequestBody)
+	if err != nil {
+		logs.Error("Fail to marshal request body, err:", err)
+		c.ApiJsonReturn("解析JSON异常", 400, err)
+	}
+	payload := strings.NewReader(string(requestBodyByte))
 	token := config.AppConfig.V8Token
 	if token == "" {
 		logs.Warn("Cannot get a valid V8 access token")
@@ -740,7 +767,7 @@ func (c *UploadImageController) Post() {
 	}
 	enterpriseId := config.AppConfig.EnterpriseId
 	url := fmt.Sprintf("https://api.gitee.com/enterprises/%v/attach_files/upload_with_base_64?access_token=%s",
-	    enterpriseId, token)
+		enterpriseId, token)
 	req, err := http.NewRequest("POST", url, payload)
 	if err != nil {
 		logs.Error("Fail to send post request, err:", err)
@@ -756,15 +783,20 @@ func (c *UploadImageController) Post() {
 		err = Body.Close()
 		if err != nil {
 			logs.Error("Fail to close response body of uploading file")
-		        c.ApiJsonReturn("Body关闭异常", 400, err)
+			c.ApiJsonReturn("Body关闭异常", 400, err)
 		}
 	}(resp.Body)
 	result, _ := io.ReadAll(resp.Body)
-	res := collection.Collect(string(result)).ToMap()
-	if res["success"] == true {
-		c.ApiJsonReturn("上传成功", 200, res["file"])
+	var uploadImageResponse UploadImageResponse
+	err = json.Unmarshal(result, &uploadImageResponse)
+	if err != nil {
+		logs.Error("Fail to unmarshal response to json, err:", err)
+		c.ApiJsonReturn("反解析JSON异常", 400, err)
 	}
-	c.ApiJsonReturn("上传失败", 400, res["message"])
+	if uploadImageResponse.Success == true {
+		c.ApiJsonReturn("上传成功", 200, uploadImageResponse.File)
+	}
+	c.ApiJsonReturn("上传失败", 400, uploadImageResponse.Message)
 }
 
 func SearchIssueRecord(number string) bool {

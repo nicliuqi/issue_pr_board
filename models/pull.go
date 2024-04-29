@@ -3,9 +3,9 @@ package models
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/astaxie/beego"
-	"github.com/astaxie/beego/logs"
-	"github.com/astaxie/beego/orm"
+	"github.com/beego/beego/v2/client/orm"
+	"github.com/beego/beego/v2/core/logs"
+	beego "github.com/beego/beego/v2/server/web"
 	_ "github.com/go-sql-driver/mysql"
 	"io"
 	"issue_pr_board/config"
@@ -33,19 +33,20 @@ type Pull struct {
 }
 
 type ResponseEnterpriseLabel struct {
-	Name	string	`json:"name"`
-	Color	string	`json:"color"`
-	Id	float64	`json:"id"`
+	Name  string  `json:"name"`
+	Color string  `json:"color"`
+	Id    float64 `json:"id"`
 }
 
 func init() {
-	if err := config.InitAppConfig(beego.AppConfig.String("app_conf")); err != nil {
+	appConfPath, _ := beego.AppConfig.String("app_conf")
+	if err := config.InitAppConfig(appConfPath); err != nil {
 		logs.Error(err)
 		os.Exit(1)
 	}
 	dataSource := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=%v&loc=Local", config.AppConfig.DBUsername,
-            config.AppConfig.DBPassword, config.Appconfig.DBHost, config.Appconfig.DBPort, config.AppConfig.DBName,
-            config.AppConfig.DBChar)
+		config.AppConfig.DBPassword, config.AppConfig.DBHost, config.AppConfig.DBPort, config.AppConfig.DBName,
+		config.AppConfig.DBChar)
 	err := orm.RegisterDataBase("default", "mysql", dataSource)
 	if err != nil {
 		logs.Error("Fail to register database, err:", err)
@@ -58,7 +59,7 @@ func init() {
 		return
 	}
 	url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/labels?access_token=%v",
-            config.AppConfig.AccessToken)
+		config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get enterprise labels colors, err：", err)
