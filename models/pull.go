@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
-	beego "github.com/beego/beego/v2/server/web"
 	_ "github.com/go-sql-driver/mysql"
 	"io"
 	"issue_pr_board/config"
@@ -39,8 +38,7 @@ type ResponseEnterpriseLabel struct {
 }
 
 func init() {
-	appConfPath, _ := beego.AppConfig.String("app_conf")
-	if err := config.InitAppConfig(appConfPath); err != nil {
+	if err := config.InitAppConfig(os.Getenv("CONFIG_PATH")); err != nil {
 		logs.Error(err)
 		os.Exit(1)
 	}

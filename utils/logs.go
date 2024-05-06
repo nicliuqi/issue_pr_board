@@ -24,8 +24,8 @@ func InitLogger() (err error) {
 	level, _ := BConfig.Int("log::log_level")
 	logConf["level"] = level
 	logConf["maxlines"] = maxlines
-
 	confStr, err := json.Marshal(logConf)
+
 	if err != nil {
 		fmt.Println("marshal failed,err:", err.Error())
 		return

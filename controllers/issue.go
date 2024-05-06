@@ -8,14 +8,12 @@ import (
 	"fmt"
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
-	"gopkg.in/yaml.v3"
 	"io"
 	"issue_pr_board/config"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -272,7 +270,7 @@ type NewIssueResponse struct {
 
 type NewIssueRequestBody struct {
 	AccessToken string `json:"access_token"`
-	ProjectID   int    `json:"porject_id"`
+	ProjectID   int    `json:"project_id"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	IssueTypeId int    `json:"issue_type_id"`
@@ -552,7 +550,7 @@ type MilestonesController struct {
 func (c *MilestonesController) Get() {
 	var issue []models.Issue
 	keyWord := c.GetString("keyword", "")
-	keyWord = utils.CheckParams(keyWord)
+	keyWord = utils.CheckMilestonesParams(keyWord)
 	o := orm.NewOrm()
 	var sql string
 	sql = "select distinct milestone from issue order by milestone"
@@ -718,9 +716,15 @@ type UploadImageRequestBody struct {
 }
 
 type UploadImageResponse struct {
-	Success bool   `json:"success"`
-	File    string `json:"file"`
-	Message string `json:"message"`
+	Success bool         `json:"success"`
+	File    FileResponse `json:"file"`
+	Message string       `json:"message"`
+}
+
+type FileResponse struct {
+	Filename string `json:"filename"`
+	Title    string `json:"title"`
+	Url      string `json:"url"`
 }
 
 func (c *UploadImageController) Post() {
@@ -828,12 +832,12 @@ func GetIssuePriority(priorityNum float64) string {
 
 type NotifyConf struct {
 	Sigs []struct {
-		Name      string   `yaml:"name"`
-		Receivers []string `yaml:"receivers"`
+		Name      string   `json:"name"`
+		Receivers []string `json:"receivers"`
 	}
 	Repos []struct {
-		Name      string   `yaml:"name"`
-		Receivers []string `yaml:"receivers"`
+		Name      string   `json:"name"`
+		Receivers []string `json:"receivers"`
 	}
 }
 
@@ -843,9 +847,8 @@ func NewIssueNotify(enterpriseNumber int, number, link, title string) {
 		return
 	}
 
-	var notifyConf NotifyConf
-	buffer, err := os.ReadFile("conf/new_issue_notify.yaml")
-	err = yaml.Unmarshal(buffer, &notifyConf)
+	var notifyConf = &NotifyConf{}
+	err := config.LoadFromYaml("conf/new_issue_notify.yaml", notifyConf)
 	if err != nil {
 		logs.Error(err)
 		return

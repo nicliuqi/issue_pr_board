@@ -16,6 +16,7 @@ type appConfig struct {
 	DBPort         int    `json:"db_port"`
 	DBUsername     string `json:"db_username"`
 	EnterpriseId   string `json:"enterprise_id"`
+	RandRawString  string `json:"rand_raw_string"`
 	SMTPHost       string `json:"smtp_host"`
 	SMTPPassword   string `json:"smtp_password"`
 	SMTPPort       int    `json:"smtp_port"`
@@ -28,7 +29,7 @@ type appConfig struct {
 
 func InitAppConfig(path string) error {
 	cfg := AppConfig
-	if err := loadFromYaml(path, cfg); err != nil {
+	if err := LoadFromYaml(path, cfg); err != nil {
 		return err
 	}
 	cfg.setDefault()
@@ -39,7 +40,7 @@ func InitAppConfig(path string) error {
 	return nil
 }
 
-func loadFromYaml(path string, cfg interface{}) error {
+func LoadFromYaml(path string, cfg interface{}) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return err

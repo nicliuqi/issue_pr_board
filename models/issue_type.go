@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
-	"gopkg.in/yaml.v3"
+	"issue_pr_board/config"
 	"issue_pr_board/utils"
 	"os"
 	"path"
@@ -26,21 +26,8 @@ type IssueTypeInfo struct {
 }
 
 type IssueTypePlatform struct {
-	UniqueId int    `yaml:"unique_id"`
-	Platform string `yaml:"platform"`
-}
-
-func readIssueTypesInfo(filePath string) []IssueTypeInfo {
-	buf, err := os.ReadFile(filePath)
-	if err != nil {
-		logs.Error("Fail to read issue types yaml, err:", err)
-	}
-	var info []IssueTypeInfo
-	err = yaml.Unmarshal(buf, &info)
-	if err != nil {
-		logs.Error("Fail to parse issue types info, err:", err)
-	}
-	return info
+	UniqueId int    `json:"unique_id"`
+	Platform string `json:"platform"`
 }
 
 func searchIssueType(name string, platform string, organization string) (bool, int) {
@@ -72,10 +59,15 @@ func InitIssueType() {
 		if !utils.InMap(utils.ConvertStrSlice2Map(orgFiles), "issue_types.yaml") {
 			continue
 		}
-		info := readIssueTypesInfo(path.Join("templates", "issues", organization.Name(), "issue_types.yaml"))
+		var info = &[]IssueTypeInfo{}
+		err = config.LoadFromYaml(path.Join("templates", "issues", organization.Name(), "issue_types.yaml"), info)
+		if err != nil {
+			logs.Error(err)
+			return
+		}
 		confIssueTypes := make([]map[string]interface{}, 0)
 		var issueType IssueType
-		for _, i := range info {
+		for _, i := range *info {
 			issueType.Organization = organization.Name()
 			issueType.Name = i.Name
 			if utils.InMap(utils.ConvertStrSlice2Map(orgFiles), i.Name+".md") {

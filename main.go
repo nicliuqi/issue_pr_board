@@ -5,6 +5,7 @@ import (
 	beego "github.com/beego/beego/v2/server/web"
 	"github.com/beego/beego/v2/task"
 	"issue_pr_board/controllers"
+	"issue_pr_board/models"
 	_ "issue_pr_board/models"
 	_ "issue_pr_board/routers"
 	"issue_pr_board/utils"
@@ -15,7 +16,7 @@ func init() {
 }
 
 func main() {
-	tk1 := task.NewTask("syncEnterprisePulls", "0 30 8 * * ?", func(ctx context.Context) error {
+	tk1 := task.NewTask("syncEnterprisePulls", "0 0 5 * * ?", func(ctx context.Context) error {
 		return SyncEnterprisePulls()
 	})
 	tk2 := task.NewTask("syncEnterpriseIssues", "0 0 3 * * ?", func(ctx context.Context) error {
@@ -33,6 +34,7 @@ func main() {
 	task.AddTask("cleanVerification", tk4)
 	task.StartTask()
 	defer task.StopTask()
+	go models.InitIssueType()
 	go utils.InitCaptchaFactory()
 	beego.Run()
 }

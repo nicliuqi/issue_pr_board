@@ -195,6 +195,16 @@ func CheckParams(param string) string {
 	return param
 }
 
+func CheckMilestonesParams(param string) string {
+	warningWords := []string{"'", "\"", "<", ">", "=", "&", "\\", "#", ";", "(", ")", "%", "!"}
+	for _, warningWord := range warningWords {
+		if strings.Contains(param, warningWord) {
+			return ""
+		}
+	}
+	return param
+}
+
 func ConvertStrSlice2Map(sl []string) map[string]struct{} {
 	set := make(map[string]struct{}, len(sl))
 	for _, v := range sl {
