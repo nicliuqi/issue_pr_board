@@ -36,5 +36,6 @@ func main() {
 	defer task.StopTask()
 	go models.InitIssueType()
 	go utils.InitCaptchaFactory()
+	go SyncEnterpriseIssues()
 	beego.Run()
 }
