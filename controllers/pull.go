@@ -3,6 +3,7 @@ package controllers
 import (
 	"fmt"
 	"github.com/beego/beego/v2/client/orm"
+	"github.com/go-playground/validator/v10"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
 	"sort"
@@ -14,20 +15,20 @@ type PullsController struct {
 }
 
 type QueryPullParam struct {
-	Org       string
-	Repo      string
-	Sig       string
-	State     string
-	Ref       string
-	Author    string
-	Assignee  string
+	Org       string `validate:"max=20"`
+	Repo      string `validate:"max=100"`
+	Sig       string `validate:"max=100"`
+	State     string `validate:"max=20"`
+	Ref       string `validate:"max=100"`
+	Author    string `validate:"max=50"`
+	Assignee  string `validate:"max=50"`
 	Label     string
 	Exclusion string
-	Search    string
-	Sort      string
-	Direction string
-	Page      int
-	PerPage   int
+	Search    string `validate:"max=255"`
+	Sort      string `validate:"max=10"`
+	Direction string `validate:"max=4"`
+	Page      int    `validate:"min=1"`
+	PerPage   int    `validate:"max=100"`
 }
 
 func formQueryPullSql(q QueryPullParam) (int64, string) {
@@ -138,9 +139,6 @@ func (c *PullsController) Get() {
 	var pull []models.Pull
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 10)
-	if perPage > 100 {
-		perPage = 100
-	}
 	qp := QueryPullParam{
 		Org:       c.GetString("org", ""),
 		Repo:      c.GetString("repo", ""),
@@ -157,6 +155,11 @@ func (c *PullsController) Get() {
 		Page:      page,
 		PerPage:   perPage,
 	}
+	validate := validator.New()
+	validateErr := validate.Struct(qp)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
+	}
 	count, sql := formQueryPullSql(qp)
 	o := orm.NewOrm()
 	_, err := o.Raw(sql).QueryRows(&pull)
@@ -171,10 +174,22 @@ type PullsSigsController struct {
 	BaseController
 }
 
+type PullsSigsParams struct {
+	KeyWord string `validate:"max=50"`
+}
+
 func (c *PullsSigsController) Get() {
 	var pull []models.Pull
 	keyWord := c.GetString("keyword", "")
 	keyWord = utils.CheckParams(keyWord)
+	params := PullsSigsParams{
+		KeyWord: keyWord,
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
+	}
 	o := orm.NewOrm()
 	sql := "select distinct sig from pull where sig != 'Private' order by sig"
 	_, err := o.Raw(sql).QueryRows(&pull)
@@ -202,19 +217,34 @@ type PullsReposController struct {
 	BaseController
 }
 
+type PullsReposParams struct {
+	KeyWord string `validate:"max=100"`
+	Page    int    `validate:"min=1"`
+	PerPage int    `validate:"max=100"`
+	Sig     string `validate:"max=100"`
+}
+
 func (c *PullsReposController) Get() {
 	var pull []models.Pull
 	var pull2 []models.Pull
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 10)
-	if perPage > 100 {
-		perPage = 100
-	}
 	offset := perPage * (page - 1)
 	sig := c.GetString("sig", "")
 	keyWord := c.GetString("keyword", "")
 	sig = utils.CheckParams(sig)
 	keyWord = utils.CheckParams(keyWord)
+	params := PullsReposParams{
+		KeyWord: keyWord,
+		Page:    page,
+		PerPage: perPage,
+		Sig:     sig,
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
+	}
 	o := orm.NewOrm()
 	sql := ""
 	if sig == "" {
@@ -269,12 +299,19 @@ func (c *PullsRefsController) Get() {
 	var pull2 []models.Pull
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 10)
-	if perPage > 100 {
-		perPage = 100
-	}
 	offset := perPage * (page - 1)
 	keyWord := c.GetString("keyword", "")
 	keyWord = utils.CheckParams(keyWord)
+	params := CommonParams{
+		KeyWord: keyWord,
+		Page:    page,
+		PerPage: perPage,
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
+	}
 	o := orm.NewOrm()
 	sql := "select distinct ref from pull where sig != 'Private' order by ref"
 	count, err := o.Raw(sql).QueryRows(&pull)
@@ -325,8 +362,15 @@ func (c *PullsAuthorsController) Get() {
 	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
 	keyWord = utils.CheckParams(keyWord)
-	if perPage > 100 {
-		perPage = 100
+	params := CommonParams{
+		KeyWord: keyWord,
+		Page:    page,
+		PerPage: perPage,
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
 	offset := perPage * (page - 1)
 	o := orm.NewOrm()
@@ -380,8 +424,15 @@ func (c *PullsAssigneesController) Get() {
 	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
 	keyWord = utils.CheckParams(keyWord)
-	if perPage > 100 {
-		perPage = 100
+	params := CommonParams{
+		KeyWord: keyWord,
+		Page:    page,
+		PerPage: perPage,
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
 	offset := perPage * (page - 1)
 	o := orm.NewOrm()
@@ -433,8 +484,15 @@ func (c *PullsLabelsController) Get() {
 	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
 	keyWord = utils.CheckParams(keyWord)
-	if perPage > 100 {
-		perPage = 100
+	params := CommonParams{
+		KeyWord: keyWord,
+		Page:    page,
+		PerPage: perPage,
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
 	offset := perPage * (page - 1)
 	o := orm.NewOrm()

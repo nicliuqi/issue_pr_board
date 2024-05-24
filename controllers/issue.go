@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
+	"github.com/go-playground/validator/v10"
 	"io"
 	"issue_pr_board/config"
 	"issue_pr_board/models"
@@ -22,25 +23,25 @@ type IssuesController struct {
 }
 
 type QueryIssueParam struct {
-	Org        string
-	Repo       string
-	Sig        string
-	State      string
-	Number     string
-	Author     string
-	Assignee   string
-	Branch     string
+	Org        string `validate:"max=20"`
+	Repo       string `validate:"max=100"`
+	Sig        string `validate:"max=100"`
+	State      string `validate:"max=20"`
+	Number     string `validate:"max=10"`
+	Author     string `validate:"max=50"`
+	Assignee   string `validate:"max=50"`
+	Branch     string `validate:"max=100"`
 	Label      string
 	Exclusion  string
 	IssueState string
-	IssueType  string
-	Priority   string
-	Search     string
-	Sort       string
-	Direction  string
-	Milestone  string
-	Page       int
-	PerPage    int
+	IssueType  string `validate:"max=20"`
+	Priority   string `validate:"max=10"`
+	Search     string `validate:"max=255"`
+	Sort       string `validate:"max=10"`
+	Direction  string `validate:"max=4"`
+	Milestone  string `validate:"max=255"`
+	Page       int    `validate:"min=1"`
+	PerPage    int    `validate:"max=100"`
 }
 
 func formQueryIssueSql(q QueryIssueParam) (int64, string) {
@@ -78,7 +79,7 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 	issueType = utils.CheckParams(issueType)
 	priority = utils.CheckParams(priority)
 	search = utils.CheckParams(search)
-	milestone = utils.CheckParams(milestone)
+	milestone = utils.CheckMilestonesParams(milestone)
 	if issueState != "" {
 		issueStateSql := ""
 		for index, issueStateStr := range strings.Split(issueState, ",") {
@@ -198,9 +199,6 @@ func (c *IssuesController) Get() {
 	var issue []models.Issue
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 10)
-	if perPage >= 100 {
-		perPage = 100
-	}
 	qp := QueryIssueParam{
 		Org:        c.GetString("org", ""),
 		Repo:       c.GetString("repo", ""),
@@ -221,6 +219,11 @@ func (c *IssuesController) Get() {
 		Milestone:  c.GetString("milestone", ""),
 		Page:       page,
 		PerPage:    perPage,
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(qp)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
 	count, sql := formQueryIssueSql(qp)
 	o := orm.NewOrm()
@@ -254,12 +257,12 @@ type IssueNewController struct {
 }
 
 type NewIssueParams struct {
-	Email       string `json:"email"`
-	Code        string `json:"code"`
-	ProjectId   int    `json:"project_id"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	IssueTypeId int    `json:"issue_type_id"`
+	Email       string `json:"email" validate:"email"`
+	Code        string `json:"code" validate:"len=6"`
+	ProjectId   int    `json:"project_id" validate:"max=100000000"`
+	Title       string `json:"title" validate:"max=255"`
+	Description string `json:"description" validate:"max=65535"`
+	IssueTypeId int    `json:"issue_type_id" validate:"max=100000000"`
 }
 
 type NewIssueResponse struct {
@@ -290,6 +293,14 @@ func (c *IssueNewController) Post() {
 		logs.Error("Fail to unmarshal response to json, err:", err)
 		c.ApiJsonReturn("反解析JSON异常", 400, err)
 	}
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
+	}
+	if params.ProjectId != config.AppConfig.TestProjectId {
+		c.ApiJsonReturn("禁止向非测试仓库提交issue", 400, validateErr)
+	}
 	addr := params.Email
 	code := params.Code
 	if !checkCode(addr, code) {
@@ -299,8 +310,12 @@ func (c *IssueNewController) Post() {
 	newIssueRequestBody.AccessToken = config.AppConfig.V8Token
 	newIssueRequestBody.ProjectID = params.ProjectId
 	newIssueRequestBody.Title = params.Title
-	newIssueRequestBody.Description = params.Description
+	annoyAddr := strings.Split(addr, "@")[0] + "@***" +
+	    strings.Split(strings.Split(addr, "@")[1], "")[len(strings.Split(addr, "@")[1])-1]
+	newIssueRequestBody.Description = params.Description + fmt.Sprintf("\n\n-- submitted by %v", annoyAddr)
 	newIssueRequestBody.IssueTypeId = params.IssueTypeId
+	fmt.Println("origin desc:", params.Description)
+	fmt.Println("new desc:", newIssueRequestBody.Description)
 	requestBodyByte, err := json.Marshal(newIssueRequestBody)
 	if err != nil {
 		logs.Error("Fail to marshal request body, err:", err)
@@ -308,7 +323,7 @@ func (c *IssueNewController) Post() {
 	}
 	payload := strings.NewReader(string(requestBodyByte))
 	enterpriseId := config.AppConfig.EnterpriseId
-	url := fmt.Sprintf("https://api.gitee.com/enterprises/%v/issues", enterpriseId)
+	url := fmt.Sprintf("%v/enterprises/%v/issues", config.AppConfig.GiteeV8ApiPrefix, enterpriseId)
 	req, err := http.NewRequest("POST", url, payload)
 	if err != nil {
 		logs.Error("Fail to send post request, err:", err)
@@ -366,11 +381,17 @@ func (c *IssueNewController) Post() {
 	}
 	cleanCode(addr, code)
 	go NewIssueNotify(params.ProjectId, number, issueUrl, params.Title)
-	c.ApiJsonReturn("创建成功", 201, result)
+	c.ApiJsonReturn("创建成功", 200, result)
 }
 
 type AuthorsController struct {
 	BaseController
+}
+
+type CommonParams struct {
+	KeyWord string `validate:"max=100"`
+	Page    int    `validate:"min=1"`
+	PerPage int    `validate:"max=100"`
 }
 
 func (c *AuthorsController) Get() {
@@ -380,8 +401,15 @@ func (c *AuthorsController) Get() {
 	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
 	keyWord = utils.CheckParams(keyWord)
-	if perPage > 100 {
-		perPage = 100
+	params := CommonParams{
+		KeyWord: keyWord,
+		Page:    page,
+		PerPage: perPage,
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
 	offset := perPage * (page - 1)
 	o := orm.NewOrm()
@@ -442,8 +470,15 @@ func (c *AssigneesController) Get() {
 	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
 	keyWord = utils.CheckParams(keyWord)
-	if perPage > 100 {
-		perPage = 100
+	params := CommonParams{
+		KeyWord: keyWord,
+		Page:    page,
+		PerPage: perPage,
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
 	offset := perPage * (page - 1)
 	o := orm.NewOrm()
@@ -497,8 +532,15 @@ func (c *BranchesController) Get() {
 	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
 	keyWord = utils.CheckParams(keyWord)
-	if perPage > 100 {
-		perPage = 100
+	params := CommonParams{
+		KeyWord: keyWord,
+		Page:    page,
+		PerPage: perPage,
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
 	offset := perPage * (page - 1)
 	o := orm.NewOrm()
@@ -549,8 +591,20 @@ type MilestonesController struct {
 
 func (c *MilestonesController) Get() {
 	var issue []models.Issue
+	page, _ := c.GetInt("page", 1)
+	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
 	keyWord = utils.CheckMilestonesParams(keyWord)
+	params := CommonParams{
+		KeyWord: keyWord,
+		Page:    page,
+		PerPage: perPage,
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
+	}
 	o := orm.NewOrm()
 	var sql string
 	sql = "select distinct milestone from issue order by milestone"
@@ -575,11 +629,6 @@ func (c *MilestonesController) Get() {
 			}
 		}
 		count := int64(len(res))
-		page, _ := c.GetInt("page", 1)
-		perPage, _ := c.GetInt("per_page", 20)
-		if perPage > 100 {
-			perPage = 100
-		}
 		offset := perPage * (page - 1)
 		resp := make([]string, 0)
 		if offset > int(count) {
@@ -601,8 +650,20 @@ type LabelsController struct {
 
 func (c *LabelsController) Get() {
 	var issue []models.Issue
+	page, _ := c.GetInt("page", 1)
+	perPage, _ := c.GetInt("per_page", 20)
 	keyWord := c.GetString("keyword", "")
 	keyWord = utils.CheckParams(keyWord)
+	params := CommonParams{
+		KeyWord: keyWord,
+		Page:    page,
+		PerPage: perPage,
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
+	}
 	o := orm.NewOrm()
 	var sql string
 	sql = "select distinct labels from issue order by labels"
@@ -628,11 +689,6 @@ func (c *LabelsController) Get() {
 			}
 		}
 		count := int64(len(res))
-		page, _ := c.GetInt("page", 1)
-		perPage, _ := c.GetInt("per_page", 20)
-		if perPage > 100 {
-			perPage = 100
-		}
 		offset := perPage * (page - 1)
 		resp := make([]string, 0)
 		if offset > int(count) {
@@ -653,9 +709,9 @@ type TypesController struct {
 }
 
 type QueryIssueTypesParam struct {
-	Name         string
-	Platform     string
-	Organization string
+	Name         string `validate:"max=50"`
+	Platform     string `validate:"max=50"`
+	Organization string `validate:"max=50"`
 }
 
 func formQueryIssueTypesSql(q QueryIssueTypesParam) string {
@@ -696,6 +752,11 @@ func (c *TypesController) Get() {
 		Name:         c.GetString("name", ""),
 		Platform:     c.GetString("platform", ""),
 		Organization: c.GetString("organization", ""),
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(qp)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
 	o := orm.NewOrm()
 	sql := formQueryIssueTypesSql(qp)
@@ -770,8 +831,8 @@ func (c *UploadImageController) Post() {
 		c.ApiJsonReturn("认证失败", 401, "")
 	}
 	enterpriseId := config.AppConfig.EnterpriseId
-	url := fmt.Sprintf("https://api.gitee.com/enterprises/%v/attach_files/upload_with_base_64?access_token=%s",
-		enterpriseId, token)
+	url := fmt.Sprintf("%v/enterprises/%v/attach_files/upload_with_base_64?access_token=%s",
+		config.AppConfig.GiteeV8ApiPrefix, enterpriseId, token)
 	req, err := http.NewRequest("POST", url, payload)
 	if err != nil {
 		logs.Error("Fail to send post request, err:", err)

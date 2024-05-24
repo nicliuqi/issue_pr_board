@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -49,8 +51,8 @@ func HandleIssueEvent(r *http.Request) {
 		logs.Error("Fail to get sigs mapping.")
 		return
 	}
-	url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/issues/%v?access_token=%v", number,
-		config.AppConfig.AccessToken)
+	url := fmt.Sprintf("%v/enterprises/open_euler/issues/%v?access_token=%v", config.AppConfig.GiteeV5ApiPrefix,
+	    number, config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get the issue, err：", err)
@@ -228,8 +230,8 @@ func HandlePullEvent(r *http.Request) {
 	repo := strings.Split(htmlUrl, "/")[4]
 	fullName := org + "/" + repo
 	number := strings.Split(htmlUrl, "/")[6]
-	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/pulls/%v?access_token=%v", fullName, number,
-		config.AppConfig.AccessToken)
+	url := fmt.Sprintf("%v/repos/%v/pulls/%v?access_token=%v", config.AppConfig.GiteeV5ApiPrefix, fullName,
+	    number, config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get the pull request, err：", err)
@@ -344,6 +346,17 @@ func HandlePullEvent(r *http.Request) {
 	}
 }
 
+func payloadSignature(timestamp, key string) string {
+	mac := hmac.New(sha256.New, []byte(key))
+
+	c := fmt.Sprintf("%s\n%s", timestamp, key)
+	mac.Write([]byte(c))
+
+	h := mac.Sum(nil)
+
+	return base64.StdEncoding.EncodeToString(h)
+}
+
 func (c *HooksController) Post() {
 	headers := c.Ctx.Request.Header
 	_, ok := headers["X-Gitee-Event"]
@@ -352,9 +365,23 @@ func (c *HooksController) Post() {
 		c.ApiJsonReturn("Bad Request", 400, nil)
 	}
 	action := headers["X-Gitee-Event"]
+	_, ok2 := headers["X-Gitee-Token"]
+	if !ok2 {
+		logs.Warn("Notice a fake WebHook and ignore.")
+		c.ApiJsonReturn("Bad Request", 400, nil)
+	}
+	timestamp := headers["X-Gitee-Timestamp"]
+	token := headers["X-Gitee-Token"]
+	fmt.Println("timestamp:", timestamp[0])
+	fmt.Println("token:", token[0])
+	fmt.Println(token[0] == payloadSignature(timestamp[0], config.AppConfig.WebhookToken))
+	if token[0] != payloadSignature(timestamp[0], config.AppConfig.WebhookToken) {
+		logs.Warn("Notice a fake WebHook and ignore.")
+		c.ApiJsonReturn("Bad Request", 400, nil)
+	}
 	body := c.Ctx.Input.RequestBody
-	var webookRequest utils.WebhookRequest
-	err := json.Unmarshal(body, &webookRequest)
+	var webhookRequest utils.WebhookRequest
+	err := json.Unmarshal(body, &webhookRequest)
 	if err != nil {
 		logs.Error("Fail to unmarshal response to json, err:", err)
 		c.ApiJsonReturn("Bad Request", 400, err)
@@ -365,10 +392,10 @@ func (c *HooksController) Post() {
 	case action[0] == "Merge Request Hook":
 		HandlePullEvent(c.Ctx.Request)
 	default:
-		if webookRequest.Issue.HtmlUrl != "" {
+		if webhookRequest.Issue.HtmlUrl != "" {
 			HandleIssueEvent(c.Ctx.Request)
 		}
-		if webookRequest.PullRequest.HtmlUrl != "" {
+		if webhookRequest.PullRequest.HtmlUrl != "" {
 			HandlePullEvent(c.Ctx.Request)
 		}
 		c.ApiJsonReturn("OK", 200, nil)

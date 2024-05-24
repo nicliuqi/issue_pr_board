@@ -3,18 +3,17 @@ package controllers
 import (
 	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
 	beego "github.com/beego/beego/v2/server/web"
+	"github.com/go-playground/validator/v10"
 	"io"
 	"issue_pr_board/config"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
 	"math/big"
 	"net/http"
-	"regexp"
 	"time"
 )
 
@@ -35,12 +34,6 @@ func genValidateCode(width int) string {
 		validateCode += randomInt.String()
 	}
 	return validateCode
-}
-
-func verifyEmailFormat(email string) bool {
-	pattern := `^\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*$`
-	reg := regexp.MustCompile(pattern)
-	return reg.MatchString(email)
 }
 
 func searchEmailRecord(addr string) bool {
@@ -100,24 +93,12 @@ type GetCaptchaController struct {
 	BaseController
 }
 
-func (c *GetCaptchaController) Post() {
-	params, err := getParams(c.Ctx.Request)
-	if err != nil {
-		c.CustomJsonReturn(errorRes(err))
-	}
-	if params.CaptchaType != "blockPuzzle" {
-		c.CustomJsonReturn(errorRes(errors.New("参数CaptchaType须为blockPuzzle")))
-	}
-	ser := utils.Factory.GetService(params.CaptchaType)
-	data, err := ser.Get()
-	if err != nil {
-		c.CustomJsonReturn(errorRes(err))
-	}
-	res, err := json.Marshal(successRes(data))
-	if err != nil {
-		c.CustomJsonReturn(errorRes(err))
-	}
-	c.CustomJsonReturn(utils.JsonToMap(string(res)))
+func (c *GetCaptchaController) Get() {
+	captchaId := utils.GetCaptcha()
+	data := make(map[string]interface{})
+	data["captcha_id"] = captchaId
+	data["src"] = fmt.Sprintf("/captcha/%v.png", captchaId)
+	c.ApiJsonReturn("success", 200, data)
 }
 
 type CheckCaptchaController struct {
@@ -126,26 +107,13 @@ type CheckCaptchaController struct {
 
 func (c *CheckCaptchaController) Post() {
 	params, err := getParams(c.Ctx.Request)
-	if params == nil {
-		c.CustomJsonReturn(errorRes(errors.New("参数不能为空")))
+	validate := validator.New()
+	validateErr := validate.Struct(params)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
-	if params.CaptchaType != "blockPuzzle" {
-		c.CustomJsonReturn(errorRes(errors.New("参数CaptchaType须为blockPuzzle")))
-	}
-	if params.Token == "" || params.PointJson == "" || params.CaptchaType == "" || params.Email == "" {
-		c.CustomJsonReturn(errorRes(errors.New("参数传递不完整")))
-	}
-	if err != nil {
-		c.CustomJsonReturn(errorRes(err))
-	}
-	ser := utils.Factory.GetService(params.CaptchaType)
-	err = ser.Check(params.Token, params.PointJson)
-	if err != nil {
-		c.CustomJsonReturn(errorRes(err))
-	}
-	if !verifyEmailFormat(params.Email) {
-		logs.Error("Invalid email address:", params.Email)
-		c.CustomJsonReturn(errorVerifyRes(errors.New("待验证邮箱地址非法")))
+	if !utils.VerifyCaptcha(params.CaptchaId, params.Challenge) {
+		c.ApiJsonReturn("验证失败", 400, nil)
 	}
 	captchaValue := genValidateCode(6)
 	timeUnix := time.Now().Unix()
@@ -155,14 +123,14 @@ func (c *CheckCaptchaController) Post() {
 	if searchEmailRecord(params.Email) {
 		o := orm.NewOrm()
 		qs := o.QueryTable("verify")
-		err := qs.Filter("addr", params.Email).One(&verify)
+		err = qs.Filter("addr", params.Email).One(&verify)
 		if err != nil {
-			return
+			c.ApiJsonReturn("系统异常，请联系管理", 400, nil)
 		}
 		created := verify.Created
 		if (timeUnix - created) < interval {
 			logs.Error("The interval between two verifications cannot be less than 1 minute, addr:", params.Email)
-			c.CustomJsonReturn(errorVerifyRes(errors.New("发送验证码的时间间隔不能低于一分钟")))
+			c.ApiJsonReturn("发送验证码的时间间隔不能低于一分钟", 400, nil)
 		}
 		go utils.SendVerifyEmail(ep)
 		_, err = qs.Filter("addr", params.Email).Update(orm.Params{
@@ -171,6 +139,7 @@ func (c *CheckCaptchaController) Post() {
 		})
 		if err != nil {
 			logs.Error("Fail to update verify, err:", err)
+			c.ApiJsonReturn("系统异常，请联系管理", 400, nil)
 		}
 	} else {
 		verify.Addr = params.Email
@@ -181,16 +150,16 @@ func (c *CheckCaptchaController) Post() {
 		_, err = o.Insert(&verify)
 		if err != nil {
 			logs.Error("Insert verify failed, err:", err)
+			c.ApiJsonReturn("系统异常，请联系管理", 400, nil)
 		}
 	}
-	c.CustomJsonReturn(successRes(nil))
+	c.ApiJsonReturn("邮箱验证码发送成功", 200, nil)
 }
 
 type clientParams struct {
-	Token       string `json:"token"`
-	PointJson   string `json:"pointJson"`
-	CaptchaType string `json:"captchaType"`
-	Email       string `json:"email"`
+	CaptchaId string `json:"captcha_id" validate:"max=16"`
+	Challenge string `json:"challenge" validate:"len=6"`
+	Email     string `json:"email" validate:"email"`
 }
 
 func getParams(request *http.Request) (*clientParams, error) {
@@ -204,34 +173,4 @@ func getParams(request *http.Request) (*clientParams, error) {
 		return nil, err
 	}
 	return params, nil
-}
-
-func successRes(data interface{}) map[string]interface{} {
-	ret := make(map[string]interface{})
-	ret["error"] = false
-	ret["repCode"] = "0000"
-	ret["repData"] = data
-	ret["repMsg"] = nil
-	ret["successRes"] = true
-	return ret
-}
-
-func errorRes(err error) map[string]interface{} {
-	ret := make(map[string]interface{})
-	ret["error"] = true
-	ret["repCode"] = "0001"
-	ret["repData"] = nil
-	ret["repMsg"] = err.Error()
-	ret["successRes"] = false
-	return ret
-}
-
-func errorVerifyRes(err error) map[string]interface{} {
-	ret := make(map[string]interface{})
-	ret["error"] = true
-	ret["repCode"] = "0002"
-	ret["repData"] = nil
-	ret["repMsg"] = err.Error()
-	ret["successRes"] = false
-	return ret
 }

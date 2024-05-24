@@ -56,7 +56,7 @@ func init() {
 		logs.Error("Fail to sync databases, err:", err)
 		return
 	}
-	url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/labels?access_token=%v",
+	url := fmt.Sprintf("%v/enterprises/open_euler/labels?access_token=%v", config.AppConfig.GiteeV5ApiPrefix,
 		config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {

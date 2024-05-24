@@ -16,13 +16,13 @@ func init() {
 }
 
 func main() {
-	tk1 := task.NewTask("syncEnterprisePulls", "0 0 5 * * ?", func(ctx context.Context) error {
+	tk1 := task.NewTask("syncEnterprisePulls", "0 0 18 * * ?", func(ctx context.Context) error {
 		return SyncEnterprisePulls()
 	})
-	tk2 := task.NewTask("syncEnterpriseIssues", "0 0 3 * * ?", func(ctx context.Context) error {
+	tk2 := task.NewTask("syncEnterpriseIssues", "0 0 18 * * ?", func(ctx context.Context) error {
 		return SyncEnterpriseIssues()
 	})
-	tk3 := task.NewTask("syncEnterpriseRepos", "0 0 1 * * ?", func(ctx context.Context) error {
+	tk3 := task.NewTask("syncEnterpriseRepos", "0 0 20 * * ?", func(ctx context.Context) error {
 		return SyncEnterpriseRepos()
 	})
 	tk4 := task.NewTask("cleanVerification", "0 */10 * * * *", func(ctx context.Context) error {
@@ -35,7 +35,9 @@ func main() {
 	task.StartTask()
 	defer task.StopTask()
 	go models.InitIssueType()
-	go utils.InitCaptchaFactory()
+	go utils.InitCaptcha()
+	go SyncEnterprisePulls()
 	go SyncEnterpriseIssues()
+	go SyncEnterpriseRepos()
 	beego.Run()
 }

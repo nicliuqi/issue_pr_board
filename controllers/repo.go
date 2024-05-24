@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
+	"github.com/go-playground/validator/v10"
 	"io"
 	"issue_pr_board/config"
 	"issue_pr_board/models"
@@ -18,13 +19,13 @@ type ReposController struct {
 }
 
 type QueryRepoParam struct {
-	Keyword   string
-	Sig       string
-	Page      int
-	PerPage   int
-	Direction string
-	Public    string
-	Status    string
+	Keyword   string `validate:"max=100"`
+	Sig       string `validate:"max=100"`
+	Page      int    `validate:"min=1"`
+	PerPage   int    `validate:"max=100"`
+	Direction string `validate:"max=4"`
+	Public    string `validate:"max=5"`
+	Status    string `validate:"max=20"`
 }
 
 func formQueryRepoSql(q QueryRepoParam) (int64, string) {
@@ -102,9 +103,6 @@ func (c *ReposController) Get() {
 	var repo []models.Repo
 	page, _ := c.GetInt("page", 1)
 	perPage, _ := c.GetInt("per_page", 10)
-	if perPage > 100 {
-		perPage = 100
-	}
 	qp := QueryRepoParam{
 		Keyword:   c.GetString("keyword", ""),
 		Sig:       c.GetString("sig", ""),
@@ -113,6 +111,11 @@ func (c *ReposController) Get() {
 		Direction: c.GetString("direction", ""),
 		Public:    c.GetString("public", ""),
 		Status:    c.GetString("status", ""),
+	}
+	validate := validator.New()
+	validateErr := validate.Struct(qp)
+	if validateErr != nil {
+		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
 	count, sql := formQueryRepoSql(qp)
 	o := orm.NewOrm()
@@ -164,7 +167,8 @@ func SyncRepoNumber() error {
 	page := 1
 	for {
 		logs.Info("Sync repos: Page", page)
-		url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/repos?type=all&page=%v&per_page=100&access_token=%v", page, config.AppConfig.AccessToken)
+		url := fmt.Sprintf("%v/enterprises/open_euler/repos?type=all&page=%v&per_page=100&access_token=%v",
+			config.AppConfig.GiteeV5ApiPrefix, page, config.AppConfig.AccessToken)
 		resp, err := http.Get(url)
 		if err != nil {
 			logs.Error("Fail to get enterprise pull requests, err：", err)

@@ -13,8 +13,8 @@ import (
 )
 
 func init() {
-	beego.Router("/captcha/check", &controllers.CheckCaptchaController{})
-	beego.Router("/captcha/get", &controllers.GetCaptchaController{})
+	beego.Router("/verify/check", &controllers.CheckCaptchaController{})
+	beego.Router("/verify/get", &controllers.GetCaptchaController{})
 	beego.Router("/colors", &controllers.LabelsColorsController{})
 	beego.Router("/hooks", &controllers.HooksController{})
 	beego.Router("/image", &controllers.UploadImageController{})

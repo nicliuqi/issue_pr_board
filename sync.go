@@ -29,15 +29,15 @@ func SyncEnterprisePulls() error {
 	}
 	page := 1
 	for {
-		url := fmt.Sprintf("https://gitee.com/api/v5/enterprise/open_euler/pull_requests?state=all&sort=created"+
-			"&direction=asc&page=%v&per_page=100&access_token=%v", page, token)
+		url := fmt.Sprintf("%v/enterprise/open_euler/pull_requests?state=all&sort=created"+
+			"&direction=asc&page=%v&per_page=100&access_token=%v", config.AppConfig.GiteeV5ApiPrefix, page, token)
 		resp, err := http.Get(url)
 		if err != nil {
-			logs.Error("Fail to get enterprise pull requests, err：", err)
-			return err
+			page += 1
+			continue
 		}
 		if resp.StatusCode != 200 {
-			logs.Error("Get unexpected response when getting enterprise pulls, status:", resp.Status)
+			page += 1
 			continue
 		}
 		body, _ := io.ReadAll(resp.Body)
@@ -170,15 +170,15 @@ func SyncEnterpriseIssues() error {
 	}
 	page := 1
 	for {
-		url := fmt.Sprintf("https://gitee.com/api/v5/enterprises/open_euler/issues?state=all&sort=created"+
-			"&direction=asc&page=%v&per_page=100&access_token=%v", page, token)
+		url := fmt.Sprintf("%v/enterprises/open_euler/issues?state=all&sort=created"+
+			"&direction=asc&page=%v&per_page=100&access_token=%v", config.AppConfig.GiteeV5ApiPrefix, page, token)
 		resp, err := http.Get(url)
 		if err != nil {
-			logs.Error("Fail to get enterprise issues, err：", err)
-			return err
+			page += 1
+			continue
 		}
 		if resp.StatusCode != 200 {
-			logs.Error("Get unexpected response when getting enterprise issues, status:", resp.Status)
+			page += 1
 			continue
 		}
 		body, _ := io.ReadAll(resp.Body)
@@ -353,7 +353,7 @@ type ResponsePullBranch struct {
 }
 
 func getRepoBranches(repo string) string {
-	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/branches?access_token=%v", repo, token)
+	url := fmt.Sprintf("%v/repos/%v/branches?access_token=%v", config.AppConfig.GiteeV5ApiPrefix, repo, token)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get repo branches, err：", err)
@@ -389,8 +389,8 @@ type ResponsePullCollaborator struct {
 }
 
 func getRepoReviewers(repo string) string {
-	url := fmt.Sprintf("https://gitee.com/api/v5/repos/%v/collaborators?access_token=%v&page=1&per_page=100",
-		repo, token)
+	url := fmt.Sprintf("%v/repos/%v/collaborators?access_token=%v&page=1&per_page=100",
+		config.AppConfig.GiteeV5ApiPrefix, repo, token)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get repo members, err：", err)

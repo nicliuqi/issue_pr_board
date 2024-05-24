@@ -8,23 +8,27 @@ import (
 var AppConfig = &appConfig{}
 
 type appConfig struct {
-	AccessToken    string `json:"access_token"`
-	DBChar         string `json:"db_char"`
-	DBHost         string `json:"db_host"`
-	DBName         string `json:"db_name"`
-	DBPassword     string `json:"db_password"`
-	DBPort         int    `json:"db_port"`
-	DBUsername     string `json:"db_username"`
-	EnterpriseId   string `json:"enterprise_id"`
-	RandRawString  string `json:"rand_raw_string"`
-	SMTPHost       string `json:"smtp_host"`
-	SMTPPassword   string `json:"smtp_password"`
-	SMTPPort       int    `json:"smtp_port"`
-	SMTPSender     string `json:"smtp_sender"`
-	SMTPUsername   string `json:"smtp_username"`
-	V8Token        string `json:"v8_token"`
-	VerifyInterval int    `json:"verify_interval"`
-	VerifyExpire   int    `json:"verify_expire"`
+	AccessToken      string `json:"access_token"`
+	DBChar           string `json:"db_char"`
+	DBHost           string `json:"db_host"`
+	DBName           string `json:"db_name"`
+	DBPassword       string `json:"db_password"`
+	DBPort           int    `json:"db_port"`
+	DBUsername       string `json:"db_username"`
+	EnterpriseId     string `json:"enterprise_id"`
+	GiteeV5ApiPrefix string `json:"gitee_api_v5_prefix"`
+	GiteeV8ApiPrefix string `json:"gitee_api_v8_prefix"`
+	RandRawString    string `json:"rand_raw_string"`
+	SMTPHost         string `json:"smtp_host"`
+	SMTPPassword     string `json:"smtp_password"`
+	SMTPPort         int    `json:"smtp_port"`
+	SMTPSender       string `json:"smtp_sender"`
+	SMTPUsername     string `json:"smtp_username"`
+	TestProjectId	 int    `json:"test_project_id"`
+	V8Token          string `json:"v8_token"`
+	VerifyInterval   int    `json:"verify_interval"`
+	VerifyExpire     int    `json:"verify_expire"`
+	WebhookToken     string `json:"webhook_token"`
 }
 
 func InitAppConfig(path string) error {

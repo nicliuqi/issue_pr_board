@@ -137,8 +137,8 @@ func FormatTime(createdAt string) string {
 }
 
 func GetSigsMapping() (map[string][]string, map[string]string) {
-	url := fmt.Sprintf("https://gitee.com/api/v5/repos/openeuler/community/git/trees/master?access_token=%s"+
-		"&recursive=1", config.AppConfig.AccessToken)
+	url := fmt.Sprintf("%v/repos/openeuler/community/git/trees/master?access_token=%s"+
+		"&recursive=1", config.AppConfig.GiteeV5ApiPrefix, config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get sigs mapping, err: %v", err)
