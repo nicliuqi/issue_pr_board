@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"github.com/beego/beego/v2/client/orm"
 )
 
@@ -14,8 +13,8 @@ type Label struct {
 
 func SearchLabel(name string) bool {
 	o := orm.NewOrm()
-	searchSql := fmt.Sprintf("select * from label where name='%s'", name)
-	err := o.Raw(searchSql).QueryRow()
+	searchSql := "select * from label where name=?"
+	err := o.Raw(searchSql, name).QueryRow()
 	if err == orm.ErrNoRows {
 		return false
 	}

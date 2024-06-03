@@ -1,19 +1,19 @@
 package controllers
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
+
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
-	"io"
+
 	"issue_pr_board/config"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
-	"net/http"
-	"strings"
 )
 
 type HooksController struct {
@@ -37,9 +37,7 @@ func HandleIssueEvent(r *http.Request) {
 	number := req.Issue.Number
 	if action == "delete" {
 		o := orm.NewOrm()
-		deleteSql := fmt.Sprintf("delete from issue where number='%s'", number)
-		_, err := o.Raw(deleteSql).Exec()
-		if err != nil {
+		if _, err := o.Delete(&models.Issue{Number: number}); err != nil {
 			logs.Error("Fail to delete the non existed issue, err:", err)
 		} else {
 			logs.Info("Success to clean non existed issue:", number)
@@ -52,7 +50,7 @@ func HandleIssueEvent(r *http.Request) {
 		return
 	}
 	url := fmt.Sprintf("%v/enterprises/open_euler/issues/%v?access_token=%v", config.AppConfig.GiteeV5ApiPrefix,
-	    number, config.AppConfig.AccessToken)
+		number, config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get the issue, err：", err)
@@ -231,7 +229,7 @@ func HandlePullEvent(r *http.Request) {
 	fullName := org + "/" + repo
 	number := strings.Split(htmlUrl, "/")[6]
 	url := fmt.Sprintf("%v/repos/%v/pulls/%v?access_token=%v", config.AppConfig.GiteeV5ApiPrefix, fullName,
-	    number, config.AppConfig.AccessToken)
+		number, config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
 		logs.Error("Fail to get the pull request, err：", err)
@@ -346,17 +344,6 @@ func HandlePullEvent(r *http.Request) {
 	}
 }
 
-func payloadSignature(timestamp, key string) string {
-	mac := hmac.New(sha256.New, []byte(key))
-
-	c := fmt.Sprintf("%s\n%s", timestamp, key)
-	mac.Write([]byte(c))
-
-	h := mac.Sum(nil)
-
-	return base64.StdEncoding.EncodeToString(h)
-}
-
 func (c *HooksController) Post() {
 	headers := c.Ctx.Request.Header
 	_, ok := headers["X-Gitee-Event"]
@@ -370,12 +357,8 @@ func (c *HooksController) Post() {
 		logs.Warn("Notice a fake WebHook and ignore.")
 		c.ApiJsonReturn("Bad Request", 400, nil)
 	}
-	timestamp := headers["X-Gitee-Timestamp"]
 	token := headers["X-Gitee-Token"]
-	fmt.Println("timestamp:", timestamp[0])
-	fmt.Println("token:", token[0])
-	fmt.Println(token[0] == payloadSignature(timestamp[0], config.AppConfig.WebhookToken))
-	if token[0] != payloadSignature(timestamp[0], config.AppConfig.WebhookToken) {
+	if token[0] != config.AppConfig.WebhookToken {
 		logs.Warn("Notice a fake WebHook and ignore.")
 		c.ApiJsonReturn("Bad Request", 400, nil)
 	}

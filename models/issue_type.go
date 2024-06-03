@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
 	"issue_pr_board/config"
@@ -33,9 +32,8 @@ type IssueTypePlatform struct {
 func searchIssueType(name string, platform string, organization string) (bool, int) {
 	var issueType IssueType
 	o := orm.NewOrm()
-	searchSql := fmt.Sprintf("select * from issue_type where name='%v' and platform='%v' and organization='%v'",
-		name, platform, organization)
-	err := o.Raw(searchSql).QueryRow(&issueType)
+	searchSql := "select * from issue_type where name=? and platform=? and organization=?"
+	err := o.Raw(searchSql, name, platform, organization).QueryRow(&issueType)
 	if err == orm.ErrNoRows {
 		return false, 0
 	}
@@ -102,8 +100,14 @@ func InitIssueType() {
 					}
 				} else {
 					o := orm.NewOrm()
-					insertSql := fmt.Sprintf("insert into issue_type (name, unique_id, platform, organization, template) values('%v', '%v', '%v', '%v', '%v')", issueType.Name, issueType.UniqueId, issueType.Platform, issueType.Organization, issueType.Template)
-					_, err = o.Raw(insertSql).Exec()
+					newIssueType := IssueType{
+						Name:         issueType.Name,
+						UniqueId:     issueType.UniqueId,
+						Platform:     issueType.Platform,
+						Organization: issueType.Organization,
+						Template:     issueType.Template,
+					}
+					_, err = o.Insert(&newIssueType)
 					if err != nil {
 						logs.Error("Insert issue_type failed, err:", err)
 					}
@@ -111,9 +115,9 @@ func InitIssueType() {
 			}
 		}
 		var dbIssueTypes []IssueType
-		sql := fmt.Sprintf("select * from issue_type where organization='%v'", organization.Name())
+		sql := "select * from issue_type where organization=?"
 		o := orm.NewOrm()
-		_, err = o.Raw(sql).QueryRows(&dbIssueTypes)
+		_, err = o.Raw(sql, organization.Name()).QueryRows(&dbIssueTypes)
 		if err != nil {
 			logs.Error("Fail to query issue types, err:", err)
 		}

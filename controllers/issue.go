@@ -6,16 +6,19 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"strconv"
+	"strings"
+
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
 	"github.com/go-playground/validator/v10"
-	"io"
+
 	"issue_pr_board/config"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
-	"mime/multipart"
-	"net/http"
-	"strings"
 )
 
 type IssuesController struct {
@@ -44,7 +47,8 @@ type QueryIssueParam struct {
 	PerPage    int    `validate:"max=100"`
 }
 
-func formQueryIssueSql(q QueryIssueParam) (int64, string) {
+func formQueryIssueSql(q QueryIssueParam) (int64, string, []string) {
+	sqlParams := make([]string, 0, 0)
 	rawSql := "select * from issue where sig != 'Private'"
 	org := q.Org
 	repo := q.Repo
@@ -84,10 +88,11 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 		issueStateSql := ""
 		for index, issueStateStr := range strings.Split(issueState, ",") {
 			if index == 0 {
-				issueStateSql += fmt.Sprintf("issue_state='%s'", issueStateStr)
+				issueStateSql += fmt.Sprintf("issue_state=?")
 			} else {
-				issueStateSql += fmt.Sprintf(" or issue_state='%s'", issueStateStr)
+				issueStateSql += fmt.Sprintf(" or issue_state=?")
 			}
+			sqlParams = append(sqlParams, issueStateStr)
 		}
 		rawSql += fmt.Sprintf(" and (%s)", issueStateSql)
 	}
@@ -95,10 +100,11 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 		milestoneSql := ""
 		for index, msStr := range strings.Split(milestone, ",") {
 			if index == 0 {
-				milestoneSql += fmt.Sprintf("milestone='%s'", msStr)
+				milestoneSql += fmt.Sprintf("milestone=?")
 			} else {
-				milestoneSql += fmt.Sprintf(" or milestone='%s'", msStr)
+				milestoneSql += fmt.Sprintf(" or milestone=?")
 			}
+			sqlParams = append(sqlParams, msStr)
 		}
 		rawSql += fmt.Sprintf(" and (%s)", milestoneSql)
 	}
@@ -106,10 +112,11 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 		assigneeSql := ""
 		for index, asStr := range strings.Split(assignee, ",") {
 			if index == 0 {
-				assigneeSql += fmt.Sprintf("assignee='%s'", asStr)
+				assigneeSql += fmt.Sprintf("assignee=?")
 			} else {
-				assigneeSql += fmt.Sprintf(" or assignee='%s'", asStr)
+				assigneeSql += fmt.Sprintf(" or assignee=?")
 			}
+			sqlParams = append(sqlParams, asStr)
 		}
 		rawSql += fmt.Sprintf(" and (%s)", assigneeSql)
 	}
@@ -120,79 +127,100 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 				if strings.Contains(atStr, "@") {
 					newAuthor := strings.Split(atStr, "@")[0]
 					if newAuthor != "" {
-						authorSql += fmt.Sprintf("reporter regexp '^%s'", newAuthor)
+						authorSql += fmt.Sprintf("reporter regexp ? ")
+						sqlParams = append(sqlParams, "^"+newAuthor)
 					}
 				} else {
-					authorSql += fmt.Sprintf("author='%s'", atStr)
+					authorSql += fmt.Sprintf("author=?")
+					sqlParams = append(sqlParams, atStr)
 				}
 			} else {
 				if strings.Contains(atStr, "@") {
 					newAuthor := strings.Split(atStr, "@")[0]
 					if newAuthor != "" {
-						authorSql += fmt.Sprintf(" or reporter regexp '^%s'", newAuthor)
+						authorSql += fmt.Sprintf(" or reporter regexp ?")
+						sqlParams = append(sqlParams, "^"+newAuthor)
 					}
 				} else {
-					authorSql += fmt.Sprintf(" or author='%s'", atStr)
+					authorSql += fmt.Sprintf(" or author=?")
+					sqlParams = append(sqlParams, atStr)
 				}
 			}
 		}
 		rawSql += fmt.Sprintf(" and (%s)", authorSql)
 	}
 	if state != "" {
-		rawSql += fmt.Sprintf(" and state='%s'", state)
+		rawSql += fmt.Sprintf(" and state=?")
+		sqlParams = append(sqlParams, state)
 	}
 	if org != "" {
-		rawSql += fmt.Sprintf(" and org='%s'", org)
+		rawSql += fmt.Sprintf(" and org=?")
+		sqlParams = append(sqlParams, org)
 	}
 	if repo != "" {
-		rawSql += fmt.Sprintf(" and repo='%s'", repo)
+		rawSql += fmt.Sprintf(" and repo=?")
+		sqlParams = append(sqlParams, repo)
 	}
 	if sig != "" {
-		rawSql += fmt.Sprintf(" and sig='%s'", sig)
+		rawSql += fmt.Sprintf(" and sig=?")
+		sqlParams = append(sqlParams, sig)
 	}
 	if number != "" {
-		rawSql += fmt.Sprintf(" and number='%s'", number)
+		rawSql += fmt.Sprintf(" and number=?")
+		sqlParams = append(sqlParams, number)
 	}
 	if branch != "" {
-		rawSql += fmt.Sprintf(" and branch='%s'", branch)
+		rawSql += fmt.Sprintf(" and branch=?")
+		sqlParams = append(sqlParams, branch)
 	}
 	if label != "" {
 		label = strings.Replace(label, "，", ",", -1)
 		for _, labelStr := range strings.Split(label, ",") {
-			rawSql += fmt.Sprintf(" and find_in_set('%s', labels)", labelStr)
+			rawSql += fmt.Sprintf(" and find_in_set(?, labels)")
+			sqlParams = append(sqlParams, labelStr)
 		}
 	}
 	if exclusion != "" {
 		exclusion = strings.Replace(exclusion, "，", ",", -1)
 		for _, exclusionStr := range strings.Split(exclusion, ",") {
-			rawSql += fmt.Sprintf(" and !find_in_set('%s', labels)", exclusionStr)
+			rawSql += fmt.Sprintf(" and !find_in_set(?, labels)")
+			sqlParams = append(sqlParams, exclusionStr)
 		}
 	}
 	if issueType != "" {
-		rawSql += fmt.Sprintf(" and issue_type='%s'", issueType)
+		rawSql += fmt.Sprintf(" and issue_type=?")
+		sqlParams = append(sqlParams, issueType)
 	}
 	if priority != "" {
-		rawSql += fmt.Sprintf(" and priority='%s'", priority)
+		rawSql += fmt.Sprintf(" and priority=?")
+		sqlParams = append(sqlParams, priority)
 	}
 	if search != "" {
-		searchSql := " and concat (repo, title, number) like '%{search}%'"
-		rawSql += strings.Replace(searchSql, "{search}", search, -1)
+		rawSql += " and concat (repo, title, number) like ?"
+		search = "%" + search + "%"
+		sqlParams = append(sqlParams, search)
 	}
 	if sort != "updated_at" {
-		sort = "created_at"
-	}
-	if direction == "asc" {
-		rawSql += fmt.Sprintf(" order by %s asc", sort)
+		if direction == "asc" {
+			rawSql += " order by created_at asc"
+		} else {
+			rawSql += " order by created_at desc"
+		}
 	} else {
-		rawSql += fmt.Sprintf(" order by %s desc", sort)
+		if direction == "asc" {
+			rawSql += " order by updated_at asc"
+		} else {
+			rawSql += " order by updated_at desc"
+		}
 	}
 	o := orm.NewOrm()
 	countSql := strings.Replace(rawSql, "*", "count(*)", -1)
 	var sqlCount int
-	_ = o.Raw(countSql).QueryRow(&sqlCount)
+	_ = o.Raw(countSql, sqlParams).QueryRow(&sqlCount)
 	offset := perPage * (page - 1)
-	rawSql += fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	return int64(sqlCount), rawSql
+	rawSql += " limit ? offset ?"
+	sqlParams = append(sqlParams, strconv.Itoa(perPage), strconv.Itoa(offset))
+	return int64(sqlCount), rawSql, sqlParams
 }
 
 func (c *IssuesController) Get() {
@@ -225,9 +253,9 @@ func (c *IssuesController) Get() {
 	if validateErr != nil {
 		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
-	count, sql := formQueryIssueSql(qp)
+	count, sql, sqlParams := formQueryIssueSql(qp)
 	o := orm.NewOrm()
-	_, err := o.Raw(sql).QueryRows(&issue)
+	_, err := o.Raw(sql, sqlParams).QueryRows(&issue)
 	res := make([]models.Issue, 0)
 	if err == nil {
 		for _, i := range issue {
@@ -298,9 +326,6 @@ func (c *IssueNewController) Post() {
 	if validateErr != nil {
 		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
-	if params.ProjectId != config.AppConfig.TestProjectId {
-		c.ApiJsonReturn("禁止向非测试仓库提交issue", 400, validateErr)
-	}
 	addr := params.Email
 	code := params.Code
 	if !checkCode(addr, code) {
@@ -310,12 +335,8 @@ func (c *IssueNewController) Post() {
 	newIssueRequestBody.AccessToken = config.AppConfig.V8Token
 	newIssueRequestBody.ProjectID = params.ProjectId
 	newIssueRequestBody.Title = params.Title
-	annoyAddr := strings.Split(addr, "@")[0] + "@***" +
-	    strings.Split(strings.Split(addr, "@")[1], "")[len(strings.Split(addr, "@")[1])-1]
-	newIssueRequestBody.Description = params.Description + fmt.Sprintf("\n\n-- submitted by %v", annoyAddr)
+	newIssueRequestBody.Description = params.Description
 	newIssueRequestBody.IssueTypeId = params.IssueTypeId
-	fmt.Println("origin desc:", params.Description)
-	fmt.Println("new desc:", newIssueRequestBody.Description)
 	requestBodyByte, err := json.Marshal(newIssueRequestBody)
 	if err != nil {
 		logs.Error("Fail to marshal request body, err:", err)
@@ -359,10 +380,12 @@ func (c *IssueNewController) Post() {
 	result["number"] = number
 	if !SearchIssueRecord(number) {
 		o := orm.NewOrm()
-		insertSql := fmt.Sprintf("insert into issue (state, number, reporter) values('open', '%s', '%s')",
-			number, addr)
-		_, err = o.Raw(insertSql).Exec()
-		if err != nil {
+		issue := models.Issue{
+			State:    "open",
+			Number:   number,
+			Reporter: addr,
+		}
+		if _, err := o.Insert(&issue); err != nil {
 			logs.Error("Fail to create issue with reporter:", err)
 			c.ApiJsonReturn("创建issue失败", 400, err)
 		} else {
@@ -370,8 +393,9 @@ func (c *IssueNewController) Post() {
 		}
 	} else {
 		o := orm.NewOrm()
-		updateSql := fmt.Sprintf("update issue set reporter='%s' where number='%s'", addr, number)
-		_, err = o.Raw(updateSql).Exec()
+		_, err := o.QueryTable("issue").Filter("number", number).Update(orm.Params{
+			"reporter": addr,
+		})
 		if err != nil {
 			logs.Error("Fail to update issue reporter:", err)
 			c.ApiJsonReturn("更新issue失败", 400, err)
@@ -389,7 +413,7 @@ type AuthorsController struct {
 }
 
 type CommonParams struct {
-	KeyWord string `validate:"max=100"`
+	KeyWord string `validate:"max=50"`
 	Page    int    `validate:"min=1"`
 	PerPage int    `validate:"max=100"`
 }
@@ -418,8 +442,8 @@ func (c *AuthorsController) Get() {
 	if err != nil {
 		c.ApiJsonReturn("查询错误", 400, err)
 	}
-	separateSql := sql + fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	_, err = o.Raw(separateSql).QueryRows(&issue2)
+	separateSql := sql + fmt.Sprintf(" limit ? offset ?")
+	_, err = o.Raw(separateSql, perPage, offset).QueryRows(&issue2)
 	if err != nil {
 		c.ApiJsonReturn("分页查询错误", 400, err)
 	}
@@ -487,8 +511,8 @@ func (c *AssigneesController) Get() {
 	if err != nil {
 		c.ApiJsonReturn("查询错误", 400, err)
 	}
-	separateSql := sql + fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	_, err = o.Raw(separateSql).QueryRows(&issue2)
+	separateSql := sql + fmt.Sprintf(" limit ? offset ?")
+	_, err = o.Raw(separateSql, perPage, offset).QueryRows(&issue2)
 	if err == nil {
 		res := make([]string, 0)
 		for _, i := range issue2 {
@@ -549,8 +573,8 @@ func (c *BranchesController) Get() {
 	if err != nil {
 		c.ApiJsonReturn("查询错误", 400, err)
 	}
-	separateSql := sql + fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	_, err = o.Raw(separateSql).QueryRows(&issue2)
+	separateSql := sql + fmt.Sprintf(" limit ? offset ?")
+	_, err = o.Raw(separateSql, perPage, offset).QueryRows(&issue2)
 	if err == nil {
 		res := make([]string, 0)
 		for _, i := range issue2 {
@@ -714,7 +738,8 @@ type QueryIssueTypesParam struct {
 	Organization string `validate:"max=50"`
 }
 
-func formQueryIssueTypesSql(q QueryIssueTypesParam) string {
+func formQueryIssueTypesSql(q QueryIssueTypesParam) (string, []string) {
+	sqlParams := make([]string, 0, 0)
 	rawSql := "select * from issue_type"
 	name := q.Name
 	platform := q.Platform
@@ -724,26 +749,32 @@ func formQueryIssueTypesSql(q QueryIssueTypesParam) string {
 	organization = utils.CheckParams(organization)
 	if name != "" {
 		if len(rawSql) == 24 {
-			rawSql += fmt.Sprintf(" where name='%v'", name)
+			rawSql += fmt.Sprintf(" where name=?")
+			sqlParams = append(sqlParams, name)
 		} else {
-			rawSql += fmt.Sprintf(" and name='%v'", name)
+			rawSql += fmt.Sprintf(" and name=?")
+			sqlParams = append(sqlParams, name)
 		}
 	}
 	if platform != "" {
 		if len(rawSql) == 24 {
-			rawSql += fmt.Sprintf(" where platform='%v'", platform)
+			rawSql += fmt.Sprintf(" where platform=?")
+			sqlParams = append(sqlParams, platform)
 		} else {
-			rawSql += fmt.Sprintf(" and platform='%v'", platform)
+			rawSql += fmt.Sprintf(" and platform=?")
+			sqlParams = append(sqlParams, platform)
 		}
 	}
 	if organization != "" {
 		if len(rawSql) == 24 {
-			rawSql += fmt.Sprintf(" where organization='%v'", organization)
+			rawSql += fmt.Sprintf(" where organization=?")
+			sqlParams = append(sqlParams, organization)
 		} else {
-			rawSql += fmt.Sprintf(" and organization='%v'", organization)
+			rawSql += fmt.Sprintf(" and organization=?")
+			sqlParams = append(sqlParams, organization)
 		}
 	}
-	return rawSql
+	return rawSql, sqlParams
 }
 
 func (c *TypesController) Get() {
@@ -759,8 +790,8 @@ func (c *TypesController) Get() {
 		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
 	o := orm.NewOrm()
-	sql := formQueryIssueTypesSql(qp)
-	_, err := o.Raw(sql).QueryRows(&issueTypes)
+	sql, sqlParams := formQueryIssueTypesSql(qp)
+	_, err := o.Raw(sql, sqlParams).QueryRows(&issueTypes)
 	if err != nil {
 		logs.Error("Fail to query issue types, err:", err)
 		c.ApiJsonReturn("请求失败", 400, err)
@@ -866,8 +897,7 @@ func (c *UploadImageController) Post() {
 
 func SearchIssueRecord(number string) bool {
 	o := orm.NewOrm()
-	searchSql := fmt.Sprintf("select * from issue where number='%s'", number)
-	err := o.Raw(searchSql).QueryRow()
+	err := o.Raw("select * from issue where number=?", number).QueryRow()
 	if err == orm.ErrNoRows {
 		return false
 	}

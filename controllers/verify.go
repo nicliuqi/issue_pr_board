@@ -4,17 +4,20 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"github.com/beego/beego/v2/client/orm"
-	"github.com/beego/beego/v2/core/logs"
-	beego "github.com/beego/beego/v2/server/web"
-	"github.com/go-playground/validator/v10"
 	"io"
-	"issue_pr_board/config"
-	"issue_pr_board/models"
-	"issue_pr_board/utils"
 	"math/big"
 	"net/http"
 	"time"
+
+	"github.com/beego/beego/v2/client/orm"
+	"github.com/beego/beego/v2/core/logs"
+	beego "github.com/beego/beego/v2/server/web"
+
+	"github.com/go-playground/validator/v10"
+
+	"issue_pr_board/config"
+	"issue_pr_board/models"
+	"issue_pr_board/utils"
 )
 
 type GeneralResp struct {
@@ -38,8 +41,7 @@ func genValidateCode(width int) string {
 
 func searchEmailRecord(addr string) bool {
 	o := orm.NewOrm()
-	searchSql := fmt.Sprintf("select * from verify where addr='%s'", addr)
-	err := o.Raw(searchSql).QueryRow()
+	err := o.Raw("select * from verify where addr=?", addr).QueryRow()
 	if err == orm.ErrNoRows {
 		return false
 	}
@@ -48,8 +50,7 @@ func searchEmailRecord(addr string) bool {
 
 func checkCode(addr string, code string) bool {
 	o := orm.NewOrm()
-	searchSql := fmt.Sprintf("select * from verify where addr='%s' and code='%s'", addr, code)
-	err := o.Raw(searchSql).QueryRow()
+	err := o.Raw("select * from verify where addr=? and code=?", addr, code).QueryRow()
 	if err == orm.ErrNoRows {
 		return false
 	}
@@ -58,8 +59,8 @@ func checkCode(addr string, code string) bool {
 
 func cleanCode(addr string, code string) {
 	o := orm.NewOrm()
-	sql := fmt.Sprintf("delete from verify where addr='%s' and code='%s'", addr, code)
-	_, err := o.Raw(sql).Exec()
+	verify := models.Verify{Addr: addr, Code: code}
+	_, err := o.Delete(&verify)
 	if err != nil {
 		logs.Error("Fail to delete verify record, err:", err)
 	} else {
@@ -70,8 +71,7 @@ func cleanCode(addr string, code string) {
 func CleanVerification() error {
 	var verifications []models.Verify
 	o := orm.NewOrm()
-	sql := "select * from verify"
-	_, err := o.Raw(sql).QueryRows(&verifications)
+	_, err := o.Raw("select * from verify").QueryRows(&verifications)
 	if err != nil {
 		logs.Error("Fail to get all verify records")
 		return err

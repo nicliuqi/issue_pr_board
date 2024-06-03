@@ -2,12 +2,15 @@ package controllers
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/go-playground/validator/v10"
+
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
-	"sort"
-	"strings"
 )
 
 type PullsController struct {
@@ -31,7 +34,8 @@ type QueryPullParam struct {
 	PerPage   int    `validate:"max=100"`
 }
 
-func formQueryPullSql(q QueryPullParam) (int64, string) {
+func formQueryPullSql(q QueryPullParam) (int64, string, []string) {
+	sqlParams := make([]string, 0, 0)
 	rawSql := "select * from pull where sig != 'Private'"
 	org := q.Org
 	repo := q.Repo
@@ -61,9 +65,11 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 		stateSql := ""
 		for index, stateStr := range strings.Split(state, ",") {
 			if index == 0 {
-				stateSql += fmt.Sprintf("state='%s'", stateStr)
+				stateSql += fmt.Sprintf("state=?")
+				sqlParams = append(sqlParams, stateStr)
 			} else {
-				stateSql += fmt.Sprintf(" or state='%s'", stateStr)
+				stateSql += fmt.Sprintf(" or state=?")
+				sqlParams = append(sqlParams, stateStr)
 			}
 		}
 		rawSql += fmt.Sprintf(" and (%s)", stateSql)
@@ -72,9 +78,11 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 		authorSql := ""
 		for index, atStr := range strings.Split(author, ",") {
 			if index == 0 {
-				authorSql += fmt.Sprintf("author='%s'", atStr)
+				authorSql += fmt.Sprintf("author=?")
+				sqlParams = append(sqlParams, atStr)
 			} else {
-				authorSql += fmt.Sprintf(" or author='%s'", atStr)
+				authorSql += fmt.Sprintf(" or author=?")
+				sqlParams = append(sqlParams, atStr)
 			}
 		}
 		rawSql += fmt.Sprintf(" and (%s)", authorSql)
@@ -83,56 +91,71 @@ func formQueryPullSql(q QueryPullParam) (int64, string) {
 		assigneeSql := ""
 		for index, asStr := range strings.Split(assignee, ",") {
 			if index == 0 {
-				assigneeSql += fmt.Sprintf("find_in_set('%s', assignees)", asStr)
+				assigneeSql += fmt.Sprintf("find_in_set(?, assignees)")
+				sqlParams = append(sqlParams, asStr)
 			} else {
-				assigneeSql += fmt.Sprintf(" or find_in_set('%s', assignees)", asStr)
+				assigneeSql += fmt.Sprintf(" or find_in_set(?, assignees)")
+				sqlParams = append(sqlParams, asStr)
 			}
 		}
 		rawSql += fmt.Sprintf(" and (%s)", assigneeSql)
 	}
 	if org != "" {
-		rawSql += fmt.Sprintf(" and org='%s'", org)
+		rawSql += fmt.Sprintf(" and org=?")
+		sqlParams = append(sqlParams, org)
 	}
 	if repo != "" {
-		rawSql += fmt.Sprintf(" and repo='%s'", repo)
+		rawSql += fmt.Sprintf(" and repo=?")
+		sqlParams = append(sqlParams, repo)
 	}
 	if sig != "" {
-		rawSql += fmt.Sprintf(" and sig='%s'", sig)
+		rawSql += fmt.Sprintf(" and sig=?")
+		sqlParams = append(sqlParams, sig)
 	}
 	if ref != "" {
-		rawSql += fmt.Sprintf(" and ref='%s'", ref)
+		rawSql += fmt.Sprintf(" and ref=?")
+		sqlParams = append(sqlParams, ref)
 	}
 	if label != "" {
 		label = strings.Replace(label, "，", ",", -1)
 		for _, labelStr := range strings.Split(label, ",") {
-			rawSql += fmt.Sprintf(" and find_in_set('%s', labels)", labelStr)
+			rawSql += fmt.Sprintf(" and find_in_set(?, labels)")
+			sqlParams = append(sqlParams, labelStr)
 		}
 	}
 	if exclusion != "" {
 		exclusion = strings.Replace(exclusion, "，", ",", -1)
 		for _, exclusionStr := range strings.Split(exclusion, ",") {
-			rawSql += fmt.Sprintf(" and !find_in_set('%s', labels)", exclusionStr)
+			rawSql += fmt.Sprintf(" and !find_in_set(?, labels)")
+			sqlParams = append(sqlParams, exclusionStr)
 		}
 	}
 	if search != "" {
-		searchSql := " and concat (repo, title, sig) like '%{search}%'"
-		rawSql += strings.Replace(searchSql, "{search}", search, -1)
+		rawSql += " and concat (repo, title, sig) like ?"
+		search = "%" + search + "%"
+		sqlParams = append(sqlParams, search)
 	}
 	if order != "updated_at" {
-		order = "created_at"
-	}
-	if direction == "asc" {
-		rawSql += fmt.Sprintf(" order by %s asc", order)
+		if direction == "asc" {
+			rawSql += fmt.Sprintf(" order by created_at asc")
+		} else {
+			rawSql += fmt.Sprintf(" order by created_at desc")
+		}
 	} else {
-		rawSql += fmt.Sprintf(" order by %s desc", order)
+		if direction == "asc" {
+			rawSql += fmt.Sprintf(" order by updated_at asc")
+		} else {
+			rawSql += fmt.Sprintf(" order by updated_at desc")
+		}
 	}
 	o := orm.NewOrm()
 	countSql := strings.Replace(rawSql, "*", "count(*)", -1)
 	var sqlCount int
-	_ = o.Raw(countSql).QueryRow(&sqlCount)
+	_ = o.Raw(countSql, sqlParams).QueryRow(&sqlCount)
 	offset := perPage * (page - 1)
-	rawSql += fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	return int64(sqlCount), rawSql
+	rawSql += fmt.Sprintf(" limit ? offset ?")
+	sqlParams = append(sqlParams, strconv.Itoa(perPage), strconv.Itoa(offset))
+	return int64(sqlCount), rawSql, sqlParams
 }
 
 func (c *PullsController) Get() {
@@ -160,9 +183,9 @@ func (c *PullsController) Get() {
 	if validateErr != nil {
 		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
-	count, sql := formQueryPullSql(qp)
+	count, sql, sqlParams := formQueryPullSql(qp)
 	o := orm.NewOrm()
-	_, err := o.Raw(sql).QueryRows(&pull)
+	_, err := o.Raw(sql, sqlParams).QueryRows(&pull)
 	if err == nil {
 		c.ApiDataReturn(count, page, perPage, pull)
 	} else {
@@ -247,18 +270,20 @@ func (c *PullsReposController) Get() {
 	}
 	o := orm.NewOrm()
 	sql := ""
+	sqlParams := make([]string, 0, 0)
 	if sig == "" {
 		sql = "select distinct repo from pull where sig != 'Private' order by repo"
 	} else {
-		sql = fmt.Sprintf("select distinct repo from pull where sig != 'Private' and sig = '%s' order by repo",
-			sig)
+		sql = "select distinct repo from pull where sig != 'Private' and sig = ? order by repo"
+		sqlParams = append(sqlParams, sig)
 	}
-	count, err := o.Raw(sql).QueryRows(&pull)
+	count, err := o.Raw(sql, sqlParams).QueryRows(&pull)
 	if err != nil {
 		c.ApiJsonReturn("查询repos错误", 400, err)
 	}
-	separateSql := sql + fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	_, err = o.Raw(separateSql).QueryRows(&pull2)
+	separateSql := sql + fmt.Sprintf(" limit ? offset ?")
+	sqlParams = append(sqlParams, strconv.Itoa(perPage), strconv.Itoa(offset))
+	_, err = o.Raw(separateSql, sqlParams).QueryRows(&pull2)
 	if err != nil {
 		c.ApiJsonReturn("分页查询repos错误", 400, err)
 	}
@@ -318,8 +343,8 @@ func (c *PullsRefsController) Get() {
 	if err != nil {
 		c.ApiJsonReturn("查询refs错误", 400, err)
 	}
-	separateSql := sql + fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	_, err = o.Raw(separateSql).QueryRows(&pull2)
+	separateSql := sql + fmt.Sprintf(" limit ? offset ?")
+	_, err = o.Raw(separateSql, perPage, offset).QueryRows(&pull2)
 	if err != nil {
 		c.ApiJsonReturn("分页查询refs错误", 400, err)
 	}
@@ -379,8 +404,8 @@ func (c *PullsAuthorsController) Get() {
 	if err != nil {
 		c.ApiJsonReturn("查询错误", 400, err)
 	}
-	separateSql := sql + fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	_, err = o.Raw(separateSql).QueryRows(&pull2)
+	separateSql := sql + fmt.Sprintf(" limit ? offset ?")
+	_, err = o.Raw(separateSql, perPage, offset).QueryRows(&pull2)
 	if err != nil {
 		c.ApiJsonReturn("分页查询错误", 400, err)
 	}
@@ -536,9 +561,8 @@ func (c *PullsLabelsController) Get() {
 
 func SearchPullRecord(htmlUrl string) bool {
 	o := orm.NewOrm()
-	searchSql := fmt.Sprintf("select * from pull where link='%s'", htmlUrl)
-	err := o.Raw(searchSql).QueryRow()
-	if err == orm.ErrNoRows {
+	pull := models.Pull{Link: htmlUrl}
+	if orm.ErrNoRows == o.Read(&pull) {
 		return false
 	}
 	return true

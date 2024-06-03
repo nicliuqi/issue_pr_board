@@ -24,7 +24,6 @@ type appConfig struct {
 	SMTPPort         int    `json:"smtp_port"`
 	SMTPSender       string `json:"smtp_sender"`
 	SMTPUsername     string `json:"smtp_username"`
-	TestProjectId	 int    `json:"test_project_id"`
 	V8Token          string `json:"v8_token"`
 	VerifyInterval   int    `json:"verify_interval"`
 	VerifyExpire     int    `json:"verify_expire"`

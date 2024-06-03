@@ -425,8 +425,8 @@ func getRepoReviewers(repo string) string {
 
 func searchRepoRecord(repo string) bool {
 	o := orm.NewOrm()
-	searchSql := fmt.Sprintf("select * from repo where name='%s'", repo)
-	err := o.Raw(searchSql).QueryRow()
+	searchSql := "select * from repo where name=?"
+	err := o.Raw(searchSql, repo).QueryRow()
 	if err == orm.ErrNoRows {
 		return false
 	}
