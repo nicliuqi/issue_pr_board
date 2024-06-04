@@ -1,13 +1,15 @@
 package models
 
 import (
-	"github.com/beego/beego/v2/client/orm"
-	"github.com/beego/beego/v2/core/logs"
-	"issue_pr_board/config"
-	"issue_pr_board/utils"
 	"os"
 	"path"
 	"reflect"
+
+	"github.com/beego/beego/v2/client/orm"
+	"github.com/beego/beego/v2/core/logs"
+
+	"issue_pr_board/config"
+	"issue_pr_board/utils"
 )
 
 type IssueType struct {
@@ -32,9 +34,8 @@ type IssueTypePlatform struct {
 func searchIssueType(name string, platform string, organization string) (bool, int) {
 	var issueType IssueType
 	o := orm.NewOrm()
-	searchSql := "select * from issue_type where name=? and platform=? and organization=?"
-	err := o.Raw(searchSql, name, platform, organization).QueryRow(&issueType)
-	if err == orm.ErrNoRows {
+	if err := o.QueryTable("issue_type").Filter("name", name).Filter("platform", platform).
+		Filter("organization", organization).One(&issueType); err != nil {
 		return false, 0
 	}
 	return true, issueType.Id
@@ -45,10 +46,11 @@ func InitIssueType() {
 	if err != nil {
 		logs.Error("Fail to get organization directory list, err:", err)
 	}
+	o := orm.NewOrm()
 	for _, organization := range organizations {
-		files, err := os.ReadDir(path.Join("templates", "issues", organization.Name()))
-		if err != nil {
-			logs.Error("Fail to get templates directory list, err:", err)
+		files, fileErr := os.ReadDir(path.Join("templates", "issues", organization.Name()))
+		if fileErr != nil {
+			logs.Error("Fail to get templates directory list, err:", fileErr)
 		}
 		orgFiles := make([]string, 0)
 		for _, file := range files {
@@ -58,8 +60,7 @@ func InitIssueType() {
 			continue
 		}
 		var info = &[]IssueTypeInfo{}
-		err = config.LoadFromYaml(path.Join("templates", "issues", organization.Name(), "issue_types.yaml"), info)
-		if err != nil {
+		if err = config.LoadFromYaml(path.Join("templates", "issues", organization.Name(), "issue_types.yaml"), info); err != nil {
 			logs.Error(err)
 			return
 		}
@@ -70,9 +71,9 @@ func InitIssueType() {
 			issueType.Name = i.Name
 			if utils.InMap(utils.ConvertStrSlice2Map(orgFiles), i.Name+".md") {
 				templateFile := path.Join("templates", "issues", organization.Name(), i.Name+".md")
-				data, err := os.ReadFile(templateFile)
-				if err != nil {
-					logs.Error("Fail to read issue type template, err:", err)
+				data, dataErr := os.ReadFile(templateFile)
+				if dataErr != nil {
+					logs.Error("Fail to read issue type template, err:", dataErr)
 				}
 				issueType.Template = string(data)
 			} else {
@@ -89,17 +90,13 @@ func InitIssueType() {
 				confIssueTypes = append(confIssueTypes, issueTypeMap)
 				exist, issueTypeId := searchIssueType(issueType.Name, issueType.Platform, issueType.Organization)
 				if exist {
-					o := orm.NewOrm()
-					qs := o.QueryTable("issue_type")
-					_, err = qs.Filter("id", issueTypeId).Update(orm.Params{
+					if _, err = o.QueryTable("issue_type").Filter("id", issueTypeId).Update(orm.Params{
 						"unique_id": issueType.UniqueId,
 						"template":  issueType.Template,
-					})
-					if err != nil {
+					}); err != nil {
 						logs.Error("Update issue_type failed, err:", err)
 					}
 				} else {
-					o := orm.NewOrm()
 					newIssueType := IssueType{
 						Name:         issueType.Name,
 						UniqueId:     issueType.UniqueId,
@@ -107,18 +104,15 @@ func InitIssueType() {
 						Organization: issueType.Organization,
 						Template:     issueType.Template,
 					}
-					_, err = o.Insert(&newIssueType)
-					if err != nil {
+					if _, err = o.Insert(&newIssueType); err != nil {
 						logs.Error("Insert issue_type failed, err:", err)
 					}
 				}
 			}
 		}
 		var dbIssueTypes []IssueType
-		sql := "select * from issue_type where organization=?"
-		o := orm.NewOrm()
-		_, err = o.Raw(sql, organization.Name()).QueryRows(&dbIssueTypes)
-		if err != nil {
+		if _, err = o.QueryTable("issue_type").Filter("organization", organization.Name()).
+			All(&dbIssueTypes); err != nil {
 			logs.Error("Fail to query issue types, err:", err)
 		}
 		for _, dbIssueType := range dbIssueTypes {
@@ -136,10 +130,7 @@ func InitIssueType() {
 				}
 			}
 			if !equal {
-				o := orm.NewOrm()
-				qs := o.QueryTable("issue_type")
-				_, err = qs.Filter("id", id).Delete()
-				if err != nil {
+				if _, err = o.QueryTable("issue_type").Filter("id", id).Delete(); err != nil {
 					logs.Error("Clean redundant issue type failed, err:", err)
 				}
 			}

@@ -272,7 +272,7 @@
   - 请求参数
     | 参数 | 是否必选 | 参数类型 | 描述
     | :---: | :---: | :---: | :---
-    | keyword | 否 | string | 模糊匹配issue的指派者
+    | keyword | 否 | string | 模糊匹配仓库名
     | sig | 否 | string | 仓库所属SIG
     | direction | 否 | string | 排序，默认按仓库名称排序
     | page | 否 | int | 页数，默认1
@@ -293,21 +293,11 @@
       "data": [
         {
           "repo": "openeuler/cve-ease",
-          "sig": "Infrastructure",
-          "branches": "master",
-          "reviewers": "georgecao,TommyLike,miao_kaibo,imjoey,zerodefect,zhuchunyi,zhongjun2,zhengyuhanghans,xiangxinyong,genedna,youyifeng,wuzimo,ctyunsystem",
-          "enterprise_number": 25934492,
-          "created_at": "2022-10-31 14:36:25",
-          "updated_at": "2022-12-14 17:22:09"
+          "sig": "Infrastructure"
         },
         {
           "repo": "openeuler/cve-manager",
-          "sig": "Infrastructure",
-          "branches": "master",
-          "reviewers": "georgecao,genedna,miao_kaibo,zhuchunyi,zerodefect,xiangxinyong,TommyLike,zhengyuhanghans,imjoey,zhongjun2",
-          "enterprise_number": 11418207,
-          "created_at": "2020-09-08 19:38:25",
-          "updated_at": "2022-12-13 11:25:11"
+          "sig": "Infrastructure"
         },
         ...
       ]

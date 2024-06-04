@@ -14,12 +14,12 @@ func InitCaptcha() {
 }
 
 func GetCaptcha() string {
-	value, err := cpt.CreateCaptcha()
-	if err != nil {
+	if value, err := cpt.CreateCaptcha(); err != nil {
 		logs.Error("Create Captcha Error:", err)
 		return ""
+	} else {
+		return value
 	}
-	return value
 }
 
 func VerifyCaptcha(captchaId, code string) bool {

@@ -34,24 +34,24 @@ type EmailParams struct {
 func SendVerifyEmail(ep EmailParams) error {
 	subject := "openEuler QuickIssue"
 	htmlBody := loadTemplate(VerifyTemplate, ep)
-	err := sendEmail(ep.Receiver, subject, htmlBody)
-	if err != nil {
+	if err := sendEmail(ep.Receiver, subject, htmlBody); err != nil {
 		return err
 	} else {
-		logs.Info("Send verification code to", ep.Receiver)
-		return err
+		annoyAddr := strings.Split(strings.Split(ep.Receiver, "@")[0], "")[0] + "***@" +
+			strings.Split(ep.Receiver, "@")[1]
+		logs.Info("Send verification code to", annoyAddr)
+		return nil
 	}
 }
 
 func SendCommentAttentionEmail(ep EmailParams) error {
 	subject := fmt.Sprintf("openEuler QuickIssue: #%v %v", ep.Number, ep.Title)
 	htmlBody := loadTemplate(CommentAttentionTemplate, ep)
-	err := sendEmail(ep.Receiver, subject, htmlBody)
-	if err != nil {
+	if err := sendEmail(ep.Receiver, subject, htmlBody); err != nil {
 		logs.Error(err)
 		return err
 	} else {
-		logs.Info("Send issue comment attention to", ep.Receiver)
+		logs.Info("Send issue comment attention for issue:", ep.Number)
 		return nil
 	}
 }
@@ -59,12 +59,11 @@ func SendCommentAttentionEmail(ep EmailParams) error {
 func SendStateChangeAttentionEmail(ep EmailParams) error {
 	subject := fmt.Sprintf("openEuler QuickIssue: #%v %v", ep.Number, ep.Title)
 	htmlBody := loadTemplate(StateChangeAttentionTemplate, ep)
-	err := sendEmail(ep.Receiver, subject, htmlBody)
-	if err != nil {
+	if err := sendEmail(ep.Receiver, subject, htmlBody); err != nil {
 		logs.Error(err)
 		return err
 	} else {
-		logs.Info("Send issue state change attention to", ep.Receiver)
+		logs.Info("Send issue state change attention for issue:", ep.Number)
 		return nil
 	}
 }
@@ -72,12 +71,11 @@ func SendStateChangeAttentionEmail(ep EmailParams) error {
 func SendNewIssueNotifyEmail(ep EmailParams) error {
 	subject := fmt.Sprintf("Notice a new issue -#%v", ep.Number)
 	htmlBody := loadTemplate(NewIssueNotifyTemplate, ep)
-	err := sendEmail(ep.Receiver, subject, htmlBody)
-	if err != nil {
+	if err := sendEmail(ep.Receiver, subject, htmlBody); err != nil {
 		logs.Error(err)
 		return err
 	} else {
-		logs.Info("Send new issue notification to", ep.Receiver)
+		logs.Info("Send new issue notification for issue:", ep.Number)
 		return nil
 	}
 }
@@ -113,9 +111,8 @@ func sendEmail(receiver, subject, htmlBody string) error {
 	contentType := "Content-Type: text/html; charset=UTF-8"
 	msg := []byte("To: " + receiver + "\r\nFrom: " + config.AppConfig.SMTPSender + ">\r\nSubject: " + subject + "\r\n" +
 		contentType + "\r\n\r\n" + htmlBody)
-	err := smtp.SendMail(fmt.Sprintf("%v:%v", config.AppConfig.SMTPHost, config.AppConfig.SMTPPort), auth,
-		config.AppConfig.SMTPUsername, strings.Split(receiver, ";"), msg)
-	if err != nil {
+	if err := smtp.SendMail(fmt.Sprintf("%v:%v", config.AppConfig.SMTPHost, config.AppConfig.SMTPPort), auth,
+		config.AppConfig.SMTPUsername, strings.Split(receiver, ";"), msg); err != nil {
 		return err
 	}
 	return nil

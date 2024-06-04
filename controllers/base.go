@@ -32,11 +32,11 @@ type DataReturn struct {
 	Data    interface{} `json:"data"`
 }
 
-func (c *BaseController) ApiDataReturn(total int64, page int, per_page int, data interface{}) {
+func (c *BaseController) ApiDataReturn(total int64, page int, perPage int, data interface{}) {
 	var dr DataReturn
 	dr.Total = total
 	dr.Page = page
-	dr.PerPage = per_page
+	dr.PerPage = perPage
 	dr.Data = data
 	c.Data["json"] = dr
 	c.ServeJSON()
