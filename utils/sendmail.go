@@ -34,24 +34,23 @@ type EmailParams struct {
 func SendVerifyEmail(ep EmailParams) error {
 	subject := "openEuler QuickIssue"
 	htmlBody := loadTemplate(VerifyTemplate, ep)
-	err := sendEmail(ep.Receiver, subject, htmlBody)
-	if err != nil {
+	if err := sendEmail(ep.Receiver, subject, htmlBody); err != nil {
 		return err
 	} else {
-		logs.Info("Send verification code to", ep.Receiver)
-		return err
+		annoyAddr := strings.Split(strings.Split(ep.Receiver, "@")[0], "")[0] + "***@" +
+			strings.Split(ep.Receiver, "@")[1]
+		logs.Info("[SendVerifyEmail] Send verification code to", annoyAddr)
+		return nil
 	}
 }
 
 func SendCommentAttentionEmail(ep EmailParams) error {
 	subject := fmt.Sprintf("openEuler QuickIssue: #%v %v", ep.Number, ep.Title)
 	htmlBody := loadTemplate(CommentAttentionTemplate, ep)
-	err := sendEmail(ep.Receiver, subject, htmlBody)
-	if err != nil {
-		logs.Error(err)
+	if err := sendEmail(ep.Receiver, subject, htmlBody); err != nil {
 		return err
 	} else {
-		logs.Info("Send issue comment attention to", ep.Receiver)
+		logs.Info("[SendCommentAttentionEmail] Send issue comment attention for issue:", ep.Number)
 		return nil
 	}
 }
@@ -59,12 +58,10 @@ func SendCommentAttentionEmail(ep EmailParams) error {
 func SendStateChangeAttentionEmail(ep EmailParams) error {
 	subject := fmt.Sprintf("openEuler QuickIssue: #%v %v", ep.Number, ep.Title)
 	htmlBody := loadTemplate(StateChangeAttentionTemplate, ep)
-	err := sendEmail(ep.Receiver, subject, htmlBody)
-	if err != nil {
-		logs.Error(err)
+	if err := sendEmail(ep.Receiver, subject, htmlBody); err != nil {
 		return err
 	} else {
-		logs.Info("Send issue state change attention to", ep.Receiver)
+		logs.Info("[SendStateChangeAttentionEmail] Send issue state change attention for issue:", ep.Number)
 		return nil
 	}
 }
@@ -72,36 +69,38 @@ func SendStateChangeAttentionEmail(ep EmailParams) error {
 func SendNewIssueNotifyEmail(ep EmailParams) error {
 	subject := fmt.Sprintf("Notice a new issue -#%v", ep.Number)
 	htmlBody := loadTemplate(NewIssueNotifyTemplate, ep)
-	err := sendEmail(ep.Receiver, subject, htmlBody)
-	if err != nil {
-		logs.Error(err)
+	if err := sendEmail(ep.Receiver, subject, htmlBody); err != nil {
 		return err
 	} else {
-		logs.Info("Send new issue notification to", ep.Receiver)
+		logs.Info("[SendNewIssueNotifyEmail] Send new issue notification for issue:", ep.Number)
 		return nil
 	}
 }
 
 func loadTemplate(path string, data interface{}) string {
 	content, err := os.ReadFile(path)
+	if err != nil {
+		logs.Error("[loadTemplate] Fail to read file, err:", err)
+		return ""
+	}
 	name := filepath.Base(path)
 	tmpl, err := template.New(name).Parse(string(content))
 	if err != nil {
-		logs.Error(err)
+		logs.Error("[loadTemplate] Fail to parse email template, err:", err)
 		return ""
 	}
-	renderString, err := renderTemplate(tmpl, data)
-	if err != nil {
-		logs.Error(err)
+	if renderString, err := renderTemplate(tmpl, data); err != nil {
 		return ""
+	} else {
+		return renderString
 	}
-	return renderString
 }
 
 func renderTemplate(tmpl *template.Template, data interface{}) (string, error) {
 	buf := new(bytes.Buffer)
 	err := tmpl.Execute(buf, data)
 	if err != nil {
+		logs.Error("[renderTemplate] Fail to render template, err:", err)
 		return "", fmt.Errorf("failed to execute template")
 	}
 	return buf.String(), nil
@@ -113,9 +112,9 @@ func sendEmail(receiver, subject, htmlBody string) error {
 	contentType := "Content-Type: text/html; charset=UTF-8"
 	msg := []byte("To: " + receiver + "\r\nFrom: " + config.AppConfig.SMTPSender + ">\r\nSubject: " + subject + "\r\n" +
 		contentType + "\r\n\r\n" + htmlBody)
-	err := smtp.SendMail(fmt.Sprintf("%v:%v", config.AppConfig.SMTPHost, config.AppConfig.SMTPPort), auth,
-		config.AppConfig.SMTPUsername, strings.Split(receiver, ";"), msg)
-	if err != nil {
+	if err := smtp.SendMail(fmt.Sprintf("%v:%v", config.AppConfig.SMTPHost, config.AppConfig.SMTPPort), auth,
+		config.AppConfig.SMTPUsername, strings.Split(receiver, ";"), msg); err != nil {
+		logs.Error("[sendEmail] Fail to send email, err:", err)
 		return err
 	}
 	return nil

@@ -2,6 +2,9 @@ package controllers
 
 import (
 	"fmt"
+	"github.com/beego/beego/v2/core/logs"
+	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,8 +33,8 @@ type QueryPullParam struct {
 	Search    string `validate:"max=255"`
 	Sort      string `validate:"max=10"`
 	Direction string `validate:"max=4"`
-	Page      int    `validate:"min=1"`
-	PerPage   int    `validate:"max=100"`
+	Page      int    `validate:"min=1,max=1000000"`
+	PerPage   int    `validate:"min=1,max=100"`
 }
 
 func formQueryPullSql(q QueryPullParam) (int64, string, []string) {
@@ -179,17 +182,17 @@ func (c *PullsController) Get() {
 		PerPage:   perPage,
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(qp)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(qp); validateErr != nil {
+		logs.Error("[PullsController] Fail to validate params, err:", validateErr)
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	count, sql, sqlParams := formQueryPullSql(qp)
 	o := orm.NewOrm()
-	_, err := o.Raw(sql, sqlParams).QueryRows(&pull)
-	if err == nil {
+	if _, err := o.Raw(sql, sqlParams).QueryRows(&pull); err == nil {
+		logs.Error("[PullsController] Fail to query pull requests, err:", err)
 		c.ApiDataReturn(count, page, perPage, pull)
 	} else {
-		c.ApiJsonReturn("查询错误", 400, err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
 }
 
@@ -209,22 +212,22 @@ func (c *PullsSigsController) Get() {
 		KeyWord: keyWord,
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(params)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(params); validateErr != nil {
+		logs.Error("[PullsSigsController] Fail to validate params, err:", validateErr)
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	o := orm.NewOrm()
 	sql := "select distinct sig from pull where sig != 'Private' order by sig"
-	_, err := o.Raw(sql).QueryRows(&pull)
-	if err != nil {
-		c.ApiJsonReturn("查询sigs错误", 400, err)
+	if _, err := o.Raw(sql).QueryRows(&pull); err != nil {
+		logs.Error("[PullsSigsController] Fail to query pull request sigs, err:", err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
 	res := make([]string, 0)
 	for _, i := range pull {
 		res = append(res, i.Sig)
 	}
 	if keyWord == "" {
-		c.ApiJsonReturn("请求成功", 200, res)
+		c.ApiJsonReturn("Success", http.StatusOK, res)
 	} else {
 		res2 := make([]string, 0)
 		for _, j := range res {
@@ -232,7 +235,7 @@ func (c *PullsSigsController) Get() {
 				res2 = append(res2, j)
 			}
 		}
-		c.ApiJsonReturn("请求成功", 200, res2)
+		c.ApiJsonReturn("Success", http.StatusOK, res2)
 	}
 }
 
@@ -242,8 +245,8 @@ type PullsReposController struct {
 
 type PullsReposParams struct {
 	KeyWord string `validate:"max=100"`
-	Page    int    `validate:"min=1"`
-	PerPage int    `validate:"max=100"`
+	Page    int    `validate:"min=1,max=1000000"`
+	PerPage int    `validate:"min=1,max=100"`
 	Sig     string `validate:"max=100"`
 }
 
@@ -264,9 +267,9 @@ func (c *PullsReposController) Get() {
 		Sig:     sig,
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(params)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(params); validateErr != nil {
+		logs.Error("[PullsReposController] Fail to validate params, err:", validateErr)
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	o := orm.NewOrm()
 	sql := ""
@@ -279,13 +282,14 @@ func (c *PullsReposController) Get() {
 	}
 	count, err := o.Raw(sql, sqlParams).QueryRows(&pull)
 	if err != nil {
-		c.ApiJsonReturn("查询repos错误", 400, err)
+		logs.Error("[PullsReposController] Fail to query pull request sigs, err:", err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
 	separateSql := sql + fmt.Sprintf(" limit ? offset ?")
 	sqlParams = append(sqlParams, strconv.Itoa(perPage), strconv.Itoa(offset))
-	_, err = o.Raw(separateSql, sqlParams).QueryRows(&pull2)
-	if err != nil {
-		c.ApiJsonReturn("分页查询repos错误", 400, err)
+	if _, err = o.Raw(separateSql, sqlParams).QueryRows(&pull2); err != nil {
+		logs.Error("[PullsReposController] Fail to query pull request sigs with limits, err:", err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
 	res := make([]string, 0)
 	for _, i := range pull2 {
@@ -333,20 +337,21 @@ func (c *PullsRefsController) Get() {
 		PerPage: perPage,
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(params)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(params); validateErr != nil {
+		logs.Error("[PullsRefsController] Fail to validate params, err:", validateErr)
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	o := orm.NewOrm()
 	sql := "select distinct ref from pull where sig != 'Private' order by ref"
 	count, err := o.Raw(sql).QueryRows(&pull)
 	if err != nil {
-		c.ApiJsonReturn("查询refs错误", 400, err)
+		logs.Error("[PullsRefsController] Fail to query pull request refs, err:", err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
 	separateSql := sql + fmt.Sprintf(" limit ? offset ?")
-	_, err = o.Raw(separateSql, perPage, offset).QueryRows(&pull2)
-	if err != nil {
-		c.ApiJsonReturn("分页查询refs错误", 400, err)
+	if _, err = o.Raw(separateSql, perPage, offset).QueryRows(&pull2); err != nil {
+		logs.Error("[PullsRefsController] Fail to query pull request refs with limits, err:", err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
 	res := make([]string, 0)
 	for _, i := range pull2 {
@@ -393,26 +398,27 @@ func (c *PullsAuthorsController) Get() {
 		PerPage: perPage,
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(params)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(params); validateErr != nil {
+		logs.Error("[PullsAuthorsController] Fail to validate params, err:", validateErr)
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	offset := perPage * (page - 1)
 	o := orm.NewOrm()
 	sql := "select distinct author from pull where sig != 'Private' order by author"
 	count, err := o.Raw(sql).QueryRows(&pull)
 	if err != nil {
-		c.ApiJsonReturn("查询错误", 400, err)
+		logs.Error("[PullsAuthorsController] Fail to query pull request authors, err:", err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
 	separateSql := sql + fmt.Sprintf(" limit ? offset ?")
-	_, err = o.Raw(separateSql, perPage, offset).QueryRows(&pull2)
-	if err != nil {
-		c.ApiJsonReturn("分页查询错误", 400, err)
+	if _, err = o.Raw(separateSql, perPage, offset).QueryRows(&pull2); err != nil {
+		logs.Error("[PullsAuthorsController] Fail to query pull request authors with limits, err:", err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
 	res := make([]string, 0)
 	for _, i := range pull2 {
 		author := i.Author
-		res = append(res, author)
+		res = append(res, url.QueryEscape(author))
 	}
 	if keyWord == "" {
 		c.ApiDataReturn(count, page, perPage, res)
@@ -421,7 +427,7 @@ func (c *PullsAuthorsController) Get() {
 		for _, j := range pull {
 			author := j.Author
 			if strings.Contains(strings.ToLower(author), strings.ToLower(keyWord)) {
-				newRes = append(newRes, author)
+				newRes = append(newRes, url.QueryEscape(author))
 			}
 		}
 		count = int64(len(newRes))
@@ -455,16 +461,16 @@ func (c *PullsAssigneesController) Get() {
 		PerPage: perPage,
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(params)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(params); validateErr != nil {
+		logs.Error("[PullsAssigneesController] Fail to validate params, err:", validateErr)
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	offset := perPage * (page - 1)
 	o := orm.NewOrm()
 	sql := "select distinct assignees from pull where sig != 'Private'"
-	_, err := o.Raw(sql).QueryRows(&pull)
-	if err != nil {
-		c.ApiJsonReturn("查询错误", 400, err)
+	if _, err := o.Raw(sql).QueryRows(&pull); err != nil {
+		logs.Error("[PullsAssigneesController] Fail to query pull request assignees, err:", err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
 	res := make([]string, 0)
 	for _, i := range pull {
@@ -476,10 +482,10 @@ func (c *PullsAssigneesController) Get() {
 				continue
 			}
 			if keyWord == "" {
-				res = append(res, j)
+				res = append(res, url.QueryEscape(j))
 			} else {
 				if strings.Contains(strings.ToLower(j), strings.ToLower(keyWord)) {
-					res = append(res, j)
+					res = append(res, url.QueryEscape(j))
 				}
 			}
 		}
@@ -515,16 +521,16 @@ func (c *PullsLabelsController) Get() {
 		PerPage: perPage,
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(params)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(params); validateErr != nil {
+		logs.Error("[PullsLabelsController] Fail to validate params, err:", validateErr)
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	offset := perPage * (page - 1)
 	o := orm.NewOrm()
 	sql := "select distinct labels from pull where sig != 'Private'"
-	_, err := o.Raw(sql).QueryRows(&pull)
-	if err != nil {
-		c.ApiJsonReturn("查询错误", 400, err)
+	if _, err := o.Raw(sql).QueryRows(&pull); err != nil {
+		logs.Error("[PullsLabelsController] Fail to query pull request labels, err:", err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
 	res := make([]string, 0)
 	for _, i := range pull {
@@ -557,13 +563,4 @@ func (c *PullsLabelsController) Get() {
 		c.ApiDataReturn(count, page, perPage, resp)
 	}
 	c.ApiDataReturn(count, page, perPage, res[offset:offset+perPage])
-}
-
-func SearchPullRecord(htmlUrl string) bool {
-	o := orm.NewOrm()
-	pull := models.Pull{Link: htmlUrl}
-	if orm.ErrNoRows == o.Read(&pull) {
-		return false
-	}
-	return true
 }

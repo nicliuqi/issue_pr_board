@@ -1,15 +1,10 @@
 package models
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
 	_ "github.com/go-sql-driver/mysql"
-	"io"
-	"issue_pr_board/config"
-	"net/http"
-	"os"
 )
 
 type Pull struct {
@@ -31,72 +26,13 @@ type Pull struct {
 	Mergeable   bool   `json:"mergeable" orm:"null" description:"是否可合入"`
 }
 
-type ResponseEnterpriseLabel struct {
-	Name  string  `json:"name"`
-	Color string  `json:"color"`
-	Id    float64 `json:"id"`
-}
-
-func init() {
-	if err := config.InitAppConfig(os.Getenv("CONFIG_PATH")); err != nil {
-		logs.Error(err)
-		os.Exit(1)
+func SearchPullRecord(htmlUrl string) bool {
+	var pull Pull
+	o := orm.NewOrm()
+	if err := o.QueryTable("pull").Filter("link", htmlUrl).One(&pull); err != nil {
+		logs.Error(fmt.Sprintf("[SearchPullRecord] Fail to search pull request, PR link: %v err: %v", htmlUrl,
+			err))
+		return false
 	}
-	dataSource := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=%v&loc=Local", config.AppConfig.DBUsername,
-		config.AppConfig.DBPassword, config.AppConfig.DBHost, config.AppConfig.DBPort, config.AppConfig.DBName,
-		config.AppConfig.DBChar)
-	err := orm.RegisterDataBase("default", "mysql", dataSource)
-	if err != nil {
-		logs.Error("Fail to register database, err:", err)
-		return
-	}
-	orm.RegisterModel(new(Pull), new(Issue), new(Repo), new(Verify), new(Label), new(IssueType))
-	err = orm.RunSyncdb("default", false, true)
-	if err != nil {
-		logs.Error("Fail to sync databases, err:", err)
-		return
-	}
-	url := fmt.Sprintf("%v/enterprises/open_euler/labels?access_token=%v", config.AppConfig.GiteeV5ApiPrefix,
-		config.AppConfig.AccessToken)
-	resp, err := http.Get(url)
-	if err != nil {
-		logs.Error("Fail to get enterprise labels colors, err：", err)
-	}
-	if resp.StatusCode != 200 {
-		logs.Error("Get unexpected response when getting enterprise labels colors, status:", resp.Status)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	err = resp.Body.Close()
-	if err != nil {
-		logs.Error("Fail to close response body of enterprise issues, err:", err)
-	}
-	var rels []ResponseEnterpriseLabel
-	err = json.Unmarshal(body, &rels)
-	if err != nil {
-		logs.Error("Fail to unmarshal response to json, err:", err)
-		return
-	}
-	for _, i := range rels {
-		var lb Label
-		lb.Name = i.Name
-		lb.Color = i.Color
-		lb.UniqueId = i.Id
-		if SearchLabel(lb.Name) {
-			o := orm.NewOrm()
-			qs := o.QueryTable("label")
-			_, err = qs.Filter("name", lb.Name).Update(orm.Params{
-				"color":     lb.Color,
-				"unique_id": lb.UniqueId,
-			})
-			if err != nil {
-				logs.Error("Update label failed, err:", err)
-			}
-		} else {
-			o := orm.NewOrm()
-			_, err = o.Insert(&lb)
-			if err != nil {
-				logs.Error("Insert label failed, err:", err)
-			}
-		}
-	}
+	return true
 }

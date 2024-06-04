@@ -120,73 +120,55 @@ type ResponseRepoTree struct {
 	Path string `json:"path"`
 }
 
-func JsonToMap(str string) map[string]interface{} {
-	var tempMap map[string]interface{}
-	err := json.Unmarshal([]byte(str), &tempMap)
-	if err != nil {
-		logs.Error(err)
-		logs.Error("Parse string to map error, the string is:", str)
-		return nil
-	}
-	return tempMap
-}
-
 func FormatTime(createdAt string) string {
+	const originTimeDataLen = 25
+	if len(createdAt) != originTimeDataLen {
+		return ""
+	}
 	createdStr := strings.Replace(createdAt[:len(createdAt)-6], "T", " ", -1)
 	return createdStr
 }
 
-func GetSigsMapping() (map[string][]string, map[string]string) {
+func GetSigsMapping() map[string]string {
 	url := fmt.Sprintf("%v/repos/openeuler/community/git/trees/master?access_token=%s"+
 		"&recursive=1", config.AppConfig.GiteeV5ApiPrefix, config.AppConfig.AccessToken)
 	resp, err := http.Get(url)
 	if err != nil {
-		logs.Error("Fail to get sigs mapping, err: %v", err)
-		return nil, nil
+		logs.Error("[GetSigsMapping] Fail to get sigs mapping")
+		return nil
 	}
 	body, _ := io.ReadAll(resp.Body)
-	err = resp.Body.Close()
-	if err != nil {
-		logs.Error("Fail to close response body of getting sigs mapping, err:", err)
-		return nil, nil
+	if err = resp.Body.Close(); err != nil {
+		logs.Error("[GetSigsMapping] Fail to close response body of getting sigs mapping, err:", err)
+		return nil
 	}
+
 	var rrd ResponseRepoDir
-	err = json.Unmarshal(body, &rrd)
-	if err != nil {
-		logs.Error("Fail to unmarshal response to json, err:", err)
-		return nil, nil
+	if err = json.Unmarshal(body, &rrd); err != nil {
+		logs.Error("[GetSigsMapping] Fail to unmarshal response, err:", err)
+		return nil
 	}
-	sigs := map[string][]string{}
 	repos := map[string]string{}
 	for _, tree := range rrd.Tree {
 		path := tree.Path
 		pathSlices := strings.Split(path, "/")
-		if len(pathSlices) == 5 && strings.HasPrefix(path, "sig") &&
-			strings.HasSuffix(path, ".yaml") {
-			sigName := pathSlices[1]
-			repoName := pathSlices[2] + "/" + pathSlices[4][:len(pathSlices[4])-5]
-			repos[repoName] = sigName
-			_, ok := sigs[sigName]
-			if !ok {
-				sigs[sigName] = []string{repoName}
-			} else {
-				sigs[sigName] = append(sigs[sigName], repoName)
-			}
+		if !(len(pathSlices) == 5 && strings.HasPrefix(path, "sig") &&
+			strings.HasSuffix(path, ".yaml")) {
+			continue
 		}
+		sigName := pathSlices[1]
+		// skip to get repos of SIG Private and sig-recycle
+		if sigName == "Private" || sigName == "sig-recycle" {
+			continue
+		}
+		repoName := pathSlices[2] + "/" + pathSlices[4][:len(pathSlices[4])-5]
+		repos[repoName] = sigName
 	}
-	return sigs, repos
-}
-
-func GetSigByRepo(repos map[string]string, repo string) string {
-	sig, ok := repos[repo]
-	if !ok {
-		return ""
-	}
-	return sig
+	return repos
 }
 
 func CheckParams(param string) string {
-	warningWords := []string{" ", "'", "\"", "<", ">", "=", "&", "\\", "#", ";", "(", ")", "%", "!"}
+	warningWords := []string{" ", "'", "\"", "<", ">", "=", "&", "\\", "#", ";", "(", ")", "[", "]", "{", "}", "%", "!"}
 	for _, warningWord := range warningWords {
 		if strings.Contains(param, warningWord) {
 			return ""
@@ -196,7 +178,7 @@ func CheckParams(param string) string {
 }
 
 func CheckMilestonesParams(param string) string {
-	warningWords := []string{"'", "\"", "<", ">", "=", "&", "\\", "#", ";", "(", ")", "%", "!"}
+	warningWords := []string{"'", "\"", "<", ">", "=", "&", "\\", "#", ";", "(", ")", "[", "]", "{", "}", "%", "!"}
 	for _, warningWord := range warningWords {
 		if strings.Contains(param, warningWord) {
 			return ""

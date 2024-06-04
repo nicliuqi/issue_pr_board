@@ -1,40 +1,44 @@
 package main
 
 import (
-	"context"
+	"fmt"
+	"github.com/beego/beego/v2/client/orm"
+	"github.com/beego/beego/v2/core/logs"
 	beego "github.com/beego/beego/v2/server/web"
-	"github.com/beego/beego/v2/task"
+	"issue_pr_board/config"
 	"issue_pr_board/controllers"
 	"issue_pr_board/models"
 	_ "issue_pr_board/models"
 	_ "issue_pr_board/routers"
 	"issue_pr_board/utils"
+	"os"
 )
 
 func init() {
-	utils.LogInit()
+	if err := config.InitAppConfig(os.Getenv("CONFIG_PATH")); err != nil {
+		logs.Error("[init] Fail to init app config, err:", err)
+		os.Exit(1)
+	}
+	dataSource := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=%v&loc=Local", config.AppConfig.DBUsername,
+		config.AppConfig.DBPassword, config.AppConfig.DBHost, config.AppConfig.DBPort, config.AppConfig.DBName,
+		config.AppConfig.DBChar)
+	if err := orm.RegisterDataBase("default", "mysql", dataSource); err != nil {
+		logs.Error("[init] Fail to register database, err:", err)
+		return
+	}
+	orm.RegisterModel(new(models.Pull), new(models.Issue), new(models.Repo), new(models.Verify), new(models.Label),
+		new(models.IssueType))
+	if err := orm.RunSyncdb("default", false, true); err != nil {
+		logs.Error("[init] Fail to sync databases, err:", err)
+		return
+	}
 }
 
 func main() {
-	tk1 := task.NewTask("syncEnterprisePulls", "0 0 5 * * ?", func(ctx context.Context) error {
-		return SyncEnterprisePulls()
-	})
-	tk2 := task.NewTask("syncEnterpriseIssues", "0 0 3 * * ?", func(ctx context.Context) error {
-		return SyncEnterpriseIssues()
-	})
-	tk3 := task.NewTask("syncEnterpriseRepos", "0 0 1 * * ?", func(ctx context.Context) error {
-		return SyncEnterpriseRepos()
-	})
-	tk4 := task.NewTask("cleanVerification", "0 */10 * * * *", func(ctx context.Context) error {
-		return controllers.CleanVerification()
-	})
-	task.AddTask("syncEnterprisePulls", tk1)
-	task.AddTask("syncEnterpriseIssues", tk2)
-	task.AddTask("syncEnterpriseRepos", tk3)
-	task.AddTask("cleanVerification", tk4)
-	task.StartTask()
-	defer task.StopTask()
+	go runTasks()
 	go models.InitIssueType()
+	go models.InitLabels()
 	go utils.InitCaptcha()
-	beego.Run()
+	beego.ErrorController(&controllers.ErrorController{})
+	beego.RunWithMiddleWares("", utils.LimitMiddleware)
 }
