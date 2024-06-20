@@ -3,24 +3,20 @@ package controllers
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"strconv"
-	"strings"
-
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
 	"github.com/go-playground/validator/v10"
-
+	"io"
 	"issue_pr_board/config"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
+	"net/http"
+	"strings"
 )
 
 type ReposController struct {
 	BaseController
 }
-
 type QueryRepoParam struct {
 	Keyword   string `validate:"max=100"`
 	Sig       string `validate:"max=100"`
@@ -31,8 +27,7 @@ type QueryRepoParam struct {
 	Status    string `validate:"max=20"`
 }
 
-func formQueryRepoSql(q QueryRepoParam) (int64, string, []string) {
-	sqlParams := make([]string, 0, 0)
+func formQueryRepoSql(q QueryRepoParam) (int64, string) {
 	rawSql := "select * from repo"
 	keyword := q.Keyword
 	sig := q.Sig
@@ -47,20 +42,16 @@ func formQueryRepoSql(q QueryRepoParam) (int64, string, []string) {
 	status = utils.CheckParams(status)
 	if keyword != "" {
 		if len(rawSql) == 18 {
-			rawSql += fmt.Sprintf(" where instr (name, ?)")
-			sqlParams = append(sqlParams, strings.ToLower(keyword))
+			rawSql += fmt.Sprintf(" where instr (name, '%s')", strings.ToLower(keyword))
 		} else {
-			rawSql += fmt.Sprintf(" where instr (name, ?)")
-			sqlParams = append(sqlParams, strings.ToLower(keyword))
+			rawSql += fmt.Sprintf(" where instr (name, '%s')", strings.ToLower(keyword))
 		}
 	}
 	if sig != "" {
 		if len(rawSql) == 18 {
-			rawSql += fmt.Sprintf(" where sig=?")
-			sqlParams = append(sqlParams, sig)
+			rawSql += fmt.Sprintf(" where sig='%s'", sig)
 		} else {
-			rawSql += fmt.Sprintf(" and sig=?")
-			sqlParams = append(sqlParams, sig)
+			rawSql += fmt.Sprintf(" and sig='%s'", sig)
 		}
 	}
 	if public != "" {
@@ -83,13 +74,11 @@ func formQueryRepoSql(q QueryRepoParam) (int64, string, []string) {
 	if status != "" {
 		if len(rawSql) == 18 {
 			if status == "开始" || status == "关闭" {
-				rawSql += fmt.Sprintf(" where status=?")
-				sqlParams = append(sqlParams, status)
+				rawSql += fmt.Sprintf(" where status='%s'", status)
 			}
 		} else {
 			if status == "开始" || status == "关闭" {
-				rawSql += fmt.Sprintf(" and status=?")
-				sqlParams = append(sqlParams, status)
+				rawSql += fmt.Sprintf(" and status='%s'", status)
 			}
 		}
 	}
@@ -100,14 +89,13 @@ func formQueryRepoSql(q QueryRepoParam) (int64, string, []string) {
 	}
 	var repo []models.Repo
 	o := orm.NewOrm()
-	count, err := o.Raw(rawSql, sqlParams).QueryRows(&repo)
+	count, err := o.Raw(rawSql).QueryRows(&repo)
 	if err != nil {
-		return 0, "select * from repo", sqlParams
+		return 0, "select * from repo"
 	}
 	offset := perPage * (page - 1)
-	rawSql += " limit ? offset ?"
-	sqlParams = append(sqlParams, strconv.Itoa(perPage), strconv.Itoa(offset))
-	return count, rawSql, sqlParams
+	rawSql += fmt.Sprintf(" limit %v offset %v", perPage, offset)
+	return count, rawSql
 }
 
 func (c *ReposController) Get() {
@@ -128,9 +116,11 @@ func (c *ReposController) Get() {
 	if validateErr != nil {
 		c.ApiJsonReturn("参数错误", 400, validateErr)
 	}
-	count, sql, sqlParams := formQueryRepoSql(qp)
+	count, sql := formQueryRepoSql(qp)
+	fmt.Println("count:", count)
+	fmt.Println("sql:", sql)
 	o := orm.NewOrm()
-	_, err := o.Raw(sql, sqlParams).QueryRows(&repo)
+	_, err := o.Raw(sql).QueryRows(&repo)
 	if err == nil {
 		c.ApiDataReturn(count, page, perPage, repo)
 	} else {
@@ -140,17 +130,18 @@ func (c *ReposController) Get() {
 
 func SearchRepo(name string) bool {
 	o := orm.NewOrm()
-	err := o.Raw("select * from repo where name=?", name).QueryRow()
+	searchSql := fmt.Sprintf("select * from repo where name='%s'", name)
+	err := o.Raw(searchSql).QueryRow()
 	if err == orm.ErrNoRows {
 		return false
 	}
 	return true
 }
-
 func SearchRepoByNumber(number int) (sig string, repo string) {
 	var repos []models.Repo
 	o := orm.NewOrm()
-	_, err := o.Raw("select * from repo where enterprise_number=?", number).QueryRows(&repos)
+	searchSql := fmt.Sprintf("select * from repo where enterprise_number=%v", number)
+	_, err := o.Raw(searchSql).QueryRows(&repos)
 	if err != nil {
 		logs.Error(err)
 		return "", ""
