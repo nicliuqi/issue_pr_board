@@ -1,5 +1,4 @@
 FROM openeuler/openeuler:23.09 as BUILDER
-MAINTAINER liuqi<469227928@qq.com>
 RUN sed -i "s|repo.openeuler.org|mirrors.nju.edu.cn/openeuler|g" /etc/yum.repos.d/openEuler.repo \
  && sed -i "/metalink/d" /etc/yum.repos.d/openEuler.repo \
  && sed -i "/metadata_expire/d" /etc/yum.repos.d/openEuler.repo \
@@ -23,16 +22,15 @@ RUN sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS   90/' /etc/login.defs
 RUN echo 'set +o history' >> /root/.bashrc
 RUN rm -rf /tmp/*
 
-COPY ./conf /home/ipb/conf
-COPY ./templates /home/ipb/templates
-COPY --from=BUILDER /go/src/github.com/opensourceways/issue_pr_board/ipb /home/ipb
-RUN chmod -R 550 /home/ipb
-RUN chmod +x /home/ipb/ipb
-RUN mkdir -p /home/ipb/logs
-RUN chmod -R 750 /home/ipb/logs
+COPY --chown=ipb ./conf /home/ipb/conf
+COPY --chown=ipb ./templates /home/ipb/templates
+COPY --chown=ipb --from=BUILDER /go/src/github.com/opensourceways/issue_pr_board/ipb /home/ipb
+RUN chmod 750 /home/ipb/conf && chmod 640 /home/ipb/conf/*
+RUN chmod 750 /home/ipb/templates && chmod 750 /home/ipb/templates/email && chmod 750 /home/ipb/templates/issues && chmod 750 /home/ipb/templates/issues/openEuler && chmod 640 /home/ipb/templates/email/* && chmod 640 /home/ipb/templates/issues/openEuler/*
+RUN chmod 550 /home/ipb/ipb
 WORKDIR /home/ipb/
-RUN chown -R ${user}:${group} /home/ipb
 RUN history -c && echo "set +o history" >> /home/ipb/.bashrc  && echo "umask 027" >> /home/ipb/.bashrc && source /home/ipb/.bashrc
 ENV TZ=Asia/Shanghai
+RUN chown -R ${user}:${group} /home/ipb
 USER ${uid}:${gid}
 ENTRYPOINT ["/home/ipb/ipb"]

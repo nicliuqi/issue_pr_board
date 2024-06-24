@@ -6,16 +6,20 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"path"
+	"strconv"
+	"strings"
+
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
 	"github.com/go-playground/validator/v10"
-	"io"
+
 	"issue_pr_board/config"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
-	"mime/multipart"
-	"net/http"
-	"strings"
 )
 
 type IssuesController struct {
@@ -40,11 +44,12 @@ type QueryIssueParam struct {
 	Sort       string `validate:"max=10"`
 	Direction  string `validate:"max=4"`
 	Milestone  string `validate:"max=255"`
-	Page       int    `validate:"min=1"`
-	PerPage    int    `validate:"max=100"`
+	Page       int    `validate:"min=1,max=1000000"`
+	PerPage    int    `validate:"min=1,max=100"`
 }
 
-func formQueryIssueSql(q QueryIssueParam) (int64, string) {
+func formQueryIssueSql(q QueryIssueParam) (int64, string, []string) {
+	sqlParams := make([]string, 0, 0)
 	rawSql := "select * from issue where sig != 'Private'"
 	org := q.Org
 	repo := q.Repo
@@ -84,10 +89,11 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 		issueStateSql := ""
 		for index, issueStateStr := range strings.Split(issueState, ",") {
 			if index == 0 {
-				issueStateSql += fmt.Sprintf("issue_state='%s'", issueStateStr)
+				issueStateSql += fmt.Sprintf("issue_state=?")
 			} else {
-				issueStateSql += fmt.Sprintf(" or issue_state='%s'", issueStateStr)
+				issueStateSql += fmt.Sprintf(" or issue_state=?")
 			}
+			sqlParams = append(sqlParams, issueStateStr)
 		}
 		rawSql += fmt.Sprintf(" and (%s)", issueStateSql)
 	}
@@ -95,10 +101,11 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 		milestoneSql := ""
 		for index, msStr := range strings.Split(milestone, ",") {
 			if index == 0 {
-				milestoneSql += fmt.Sprintf("milestone='%s'", msStr)
+				milestoneSql += fmt.Sprintf("milestone=?")
 			} else {
-				milestoneSql += fmt.Sprintf(" or milestone='%s'", msStr)
+				milestoneSql += fmt.Sprintf(" or milestone=?")
 			}
+			sqlParams = append(sqlParams, msStr)
 		}
 		rawSql += fmt.Sprintf(" and (%s)", milestoneSql)
 	}
@@ -106,10 +113,11 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 		assigneeSql := ""
 		for index, asStr := range strings.Split(assignee, ",") {
 			if index == 0 {
-				assigneeSql += fmt.Sprintf("assignee='%s'", asStr)
+				assigneeSql += fmt.Sprintf("assignee=?")
 			} else {
-				assigneeSql += fmt.Sprintf(" or assignee='%s'", asStr)
+				assigneeSql += fmt.Sprintf(" or assignee=?")
 			}
+			sqlParams = append(sqlParams, asStr)
 		}
 		rawSql += fmt.Sprintf(" and (%s)", assigneeSql)
 	}
@@ -117,82 +125,99 @@ func formQueryIssueSql(q QueryIssueParam) (int64, string) {
 		authorSql := ""
 		for index, atStr := range strings.Split(author, ",") {
 			if index == 0 {
-				if strings.Contains(atStr, "@") {
-					newAuthor := strings.Split(atStr, "@")[0]
-					if newAuthor != "" {
-						authorSql += fmt.Sprintf("reporter regexp '^%s'", newAuthor)
-					}
+				if strings.Contains(atStr, "***@") {
+					newAuthor := strings.Replace(atStr, "***", "%", 1)
+					authorSql += fmt.Sprintf("reporter like ? ")
+					sqlParams = append(sqlParams, newAuthor)
 				} else {
-					authorSql += fmt.Sprintf("author='%s'", atStr)
+					authorSql += fmt.Sprintf("author=?")
+					sqlParams = append(sqlParams, atStr)
 				}
 			} else {
-				if strings.Contains(atStr, "@") {
-					newAuthor := strings.Split(atStr, "@")[0]
-					if newAuthor != "" {
-						authorSql += fmt.Sprintf(" or reporter regexp '^%s'", newAuthor)
-					}
+				if strings.Contains(atStr, "***@") {
+					newAuthor := strings.Replace(atStr, "***", "%", 1)
+					authorSql += fmt.Sprintf(" or reporter like ?")
+					sqlParams = append(sqlParams, newAuthor)
 				} else {
-					authorSql += fmt.Sprintf(" or author='%s'", atStr)
+					authorSql += fmt.Sprintf(" or author=?")
+					sqlParams = append(sqlParams, atStr)
 				}
 			}
 		}
 		rawSql += fmt.Sprintf(" and (%s)", authorSql)
 	}
 	if state != "" {
-		rawSql += fmt.Sprintf(" and state='%s'", state)
+		rawSql += fmt.Sprintf(" and state=?")
+		sqlParams = append(sqlParams, state)
 	}
 	if org != "" {
-		rawSql += fmt.Sprintf(" and org='%s'", org)
+		rawSql += fmt.Sprintf(" and org=?")
+		sqlParams = append(sqlParams, org)
 	}
 	if repo != "" {
-		rawSql += fmt.Sprintf(" and repo='%s'", repo)
+		rawSql += fmt.Sprintf(" and repo=?")
+		sqlParams = append(sqlParams, repo)
 	}
 	if sig != "" {
-		rawSql += fmt.Sprintf(" and sig='%s'", sig)
+		rawSql += fmt.Sprintf(" and sig=?")
+		sqlParams = append(sqlParams, sig)
 	}
 	if number != "" {
-		rawSql += fmt.Sprintf(" and number='%s'", number)
+		rawSql += fmt.Sprintf(" and number=?")
+		sqlParams = append(sqlParams, number)
 	}
 	if branch != "" {
-		rawSql += fmt.Sprintf(" and branch='%s'", branch)
+		rawSql += fmt.Sprintf(" and branch=?")
+		sqlParams = append(sqlParams, branch)
 	}
 	if label != "" {
 		label = strings.Replace(label, "，", ",", -1)
 		for _, labelStr := range strings.Split(label, ",") {
-			rawSql += fmt.Sprintf(" and find_in_set('%s', labels)", labelStr)
+			rawSql += fmt.Sprintf(" and find_in_set(?, labels)")
+			sqlParams = append(sqlParams, labelStr)
 		}
 	}
 	if exclusion != "" {
 		exclusion = strings.Replace(exclusion, "，", ",", -1)
 		for _, exclusionStr := range strings.Split(exclusion, ",") {
-			rawSql += fmt.Sprintf(" and !find_in_set('%s', labels)", exclusionStr)
+			rawSql += fmt.Sprintf(" and !find_in_set(?, labels)")
+			sqlParams = append(sqlParams, exclusionStr)
 		}
 	}
 	if issueType != "" {
-		rawSql += fmt.Sprintf(" and issue_type='%s'", issueType)
+		rawSql += fmt.Sprintf(" and issue_type=?")
+		sqlParams = append(sqlParams, issueType)
 	}
 	if priority != "" {
-		rawSql += fmt.Sprintf(" and priority='%s'", priority)
+		rawSql += fmt.Sprintf(" and priority=?")
+		sqlParams = append(sqlParams, priority)
 	}
 	if search != "" {
-		searchSql := " and concat (repo, title, number) like '%{search}%'"
-		rawSql += strings.Replace(searchSql, "{search}", search, -1)
+		rawSql += " and concat (repo, title, number) like ?"
+		search = "%" + search + "%"
+		sqlParams = append(sqlParams, search)
 	}
 	if sort != "updated_at" {
-		sort = "created_at"
-	}
-	if direction == "asc" {
-		rawSql += fmt.Sprintf(" order by %s asc", sort)
+		if direction == "asc" {
+			rawSql += " order by created_at asc"
+		} else {
+			rawSql += " order by created_at desc"
+		}
 	} else {
-		rawSql += fmt.Sprintf(" order by %s desc", sort)
+		if direction == "asc" {
+			rawSql += " order by updated_at asc"
+		} else {
+			rawSql += " order by updated_at desc"
+		}
 	}
 	o := orm.NewOrm()
 	countSql := strings.Replace(rawSql, "*", "count(*)", -1)
 	var sqlCount int
-	_ = o.Raw(countSql).QueryRow(&sqlCount)
+	_ = o.Raw(countSql, sqlParams).QueryRow(&sqlCount)
 	offset := perPage * (page - 1)
-	rawSql += fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	return int64(sqlCount), rawSql
+	rawSql += " limit ? offset ?"
+	sqlParams = append(sqlParams, strconv.Itoa(perPage), strconv.Itoa(offset))
+	return int64(sqlCount), rawSql, sqlParams
 }
 
 func (c *IssuesController) Get() {
@@ -223,33 +248,31 @@ func (c *IssuesController) Get() {
 	validate := validator.New()
 	validateErr := validate.Struct(qp)
 	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
-	count, sql := formQueryIssueSql(qp)
+	count, sql, sqlParams := formQueryIssueSql(qp)
 	o := orm.NewOrm()
-	_, err := o.Raw(sql).QueryRows(&issue)
-	res := make([]models.Issue, 0)
-	if err == nil {
-		for _, i := range issue {
-			reporter := i.Reporter
-			if reporter != "" {
-				tail := reporter[len(reporter)-1:]
-				reporter = strings.Split(reporter, "@")[0] + "@***" + tail
-				i.Reporter = reporter
-			}
-			description := i.Description
-			rawDescription, err := base64.StdEncoding.DecodeString(description)
-			if err != nil {
-				logs.Error("Fail to decode raw description, err:", err)
-				c.ApiJsonReturn("解码异常", 400, err)
-			}
-			i.Description = string(rawDescription)
-			res = append(res, i)
-		}
-		c.ApiDataReturn(count, page, perPage, res)
-	} else {
-		c.ApiJsonReturn("查询错误", 400, err)
+	if _, err := o.Raw(sql, sqlParams).QueryRows(&issue); err != nil {
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
+	res := make([]models.Issue, 0)
+	for _, i := range issue {
+		reporter := i.Reporter
+		if reporter != "" {
+			reporter = strings.Split(strings.Split(reporter, "@")[0], "")[0] + "***@" +
+				strings.Split(reporter, "@")[1]
+			i.Reporter = reporter
+		}
+		description := i.Description
+		rawDescription, err := base64.StdEncoding.DecodeString(description)
+		if err != nil {
+			logs.Error("Fail to decode raw description, err:", err)
+			continue
+		}
+		i.Description = string(rawDescription)
+		res = append(res, i)
+	}
+	c.ApiDataReturn(count, page, perPage, res)
 }
 
 type IssueNewController struct {
@@ -259,10 +282,11 @@ type IssueNewController struct {
 type NewIssueParams struct {
 	Email       string `json:"email" validate:"email"`
 	Code        string `json:"code" validate:"len=6"`
-	ProjectId   int    `json:"project_id" validate:"max=100000000"`
-	Title       string `json:"title" validate:"max=255"`
+	Repo        string `json:"repo" validate:"max=100"`
+	Title       string `json:"title" validate:"max=191"`
 	Description string `json:"description" validate:"max=65535"`
-	IssueTypeId int    `json:"issue_type_id" validate:"max=100000000"`
+	IssueTypeId int    `json:"issue_type_id" validate:"min=1,max=100000000"`
+	Privacy     bool   `json:"privacy"`
 }
 
 type NewIssueResponse struct {
@@ -282,73 +306,77 @@ type NewIssueRequestBody struct {
 func (c *IssueNewController) Post() {
 	logs.Info("Receive a request of creating an issue")
 	reqBody, err := io.ReadAll(c.Ctx.Request.Body)
-	err = c.Ctx.Request.Body.Close()
-	if err != nil {
-		logs.Error("Fail to close response body of creating a issue, err:", err)
-		c.ApiJsonReturn("Body关闭异常", 400, err)
+	if err = c.Ctx.Request.Body.Close(); err != nil {
+		logs.Error("Fail to close request body of creating a issue, err:", err)
+		c.ApiJsonReturn("Fail to release content of request body", http.StatusBadRequest, nil)
 	}
+
 	var params NewIssueParams
-	err = json.Unmarshal(reqBody, &params)
-	if err != nil {
-		logs.Error("Fail to unmarshal response to json, err:", err)
-		c.ApiJsonReturn("反解析JSON异常", 400, err)
+	if err = json.Unmarshal(reqBody, &params); err != nil {
+		logs.Error("Fail to unmarshal request to json, err:", err)
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	validate := validator.New()
 	validateErr := validate.Struct(params)
 	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
-	if params.ProjectId != config.AppConfig.TestProjectId {
-		c.ApiJsonReturn("禁止向非测试仓库提交issue", 400, validateErr)
+	projectId := models.GetProjectIdByRepoName(params.Repo)
+	if projectId != config.AppConfig.TestProjectId {
+		c.ApiJsonReturn("Forbidden to submit issues to non test repository", http.StatusBadRequest, nil)
 	}
-	addr := params.Email
+	addr := strings.ToLower(params.Email)
+	annoyAddr := strings.Split(strings.Split(addr, "@")[0], "")[0] + "***@" + strings.Split(addr, "@")[1]
 	code := params.Code
-	if !checkCode(addr, code) {
-		c.ApiJsonReturn("验证码错误", 400, "")
+	privacy := params.Privacy
+	if privacy != true {
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
+	logs.Info(fmt.Sprintf("User whose email address is %v had agreed the privacy to submit an issue", annoyAddr))
+	if !models.CheckCode(addr, code) {
+		c.ApiJsonReturn("Invalid verification", http.StatusBadRequest, nil)
+	}
+
 	var newIssueRequestBody NewIssueRequestBody
 	newIssueRequestBody.AccessToken = config.AppConfig.V8Token
-	newIssueRequestBody.ProjectID = params.ProjectId
+	newIssueRequestBody.ProjectID = projectId
 	newIssueRequestBody.Title = params.Title
-	annoyAddr := strings.Split(addr, "@")[0] + "@***" +
-	    strings.Split(strings.Split(addr, "@")[1], "")[len(strings.Split(addr, "@")[1])-1]
-	newIssueRequestBody.Description = params.Description + fmt.Sprintf("\n\n-- submitted by %v", annoyAddr)
+	newIssueRequestBody.Description = params.Description + fmt.Sprintf("\n\n`-- submitted by %v`", annoyAddr)
 	newIssueRequestBody.IssueTypeId = params.IssueTypeId
-	fmt.Println("origin desc:", params.Description)
-	fmt.Println("new desc:", newIssueRequestBody.Description)
 	requestBodyByte, err := json.Marshal(newIssueRequestBody)
 	if err != nil {
 		logs.Error("Fail to marshal request body, err:", err)
-		c.ApiJsonReturn("解析JSON异常", 400, err)
+		c.ApiJsonReturn("Fail to marshal request body", http.StatusBadRequest, nil)
 	}
 	payload := strings.NewReader(string(requestBodyByte))
+
 	enterpriseId := config.AppConfig.EnterpriseId
 	url := fmt.Sprintf("%v/enterprises/%v/issues", config.AppConfig.GiteeV8ApiPrefix, enterpriseId)
 	req, err := http.NewRequest("POST", url, payload)
 	if err != nil {
 		logs.Error("Fail to send post request, err:", err)
-		c.ApiJsonReturn("发送请求异常", 400, err)
+		c.ApiJsonReturn("Fail to create an issue", http.StatusBadRequest, nil)
 	}
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		logs.Error("Fail to create quick issue, err:", err)
-		c.ApiJsonReturn("创建issue失败", 400, err)
+		c.ApiJsonReturn("Fail to create an issue", http.StatusBadRequest, nil)
 	}
-	if resp.StatusCode != 201 {
-		c.ApiJsonReturn("创建issue失败", resp.StatusCode, resp.Body)
+	if resp.StatusCode != http.StatusCreated {
+		logs.Error("Get unexpected status when creating an issue, status:", resp.Status)
+		c.ApiJsonReturn("Fail to create an issue", http.StatusBadRequest, nil)
 	}
 	content, _ := io.ReadAll(resp.Body)
-	err = resp.Body.Close()
-	if err != nil {
+	if err = resp.Body.Close(); err != nil {
 		logs.Error("Fail to close response body of creating enterprise issues, err:", err)
-		c.ApiJsonReturn("无法关闭创建issue的响应", 400, err)
+		c.ApiJsonReturn("Fail to close response body of creating issues", http.StatusBadRequest, nil)
 	}
+
 	var res NewIssueResponse
-	err = json.Unmarshal(content, &res)
-	if err != nil {
+	if err = json.Unmarshal(content, &res); err != nil {
 		logs.Error("Fail to unmarshal response to json, err:", err)
-		c.ApiJsonReturn("反解析JSON异常", 400, err)
+		c.ApiJsonReturn("Fail to solve response of creating an issue", http.StatusBadRequest, nil)
 	}
 	logs.Info("An issue has been created, ready to save the info")
 	issueId := res.Id
@@ -357,31 +385,37 @@ func (c *IssueNewController) Post() {
 	result := make(map[string]interface{})
 	result["issue_id"] = issueId
 	result["number"] = number
-	if !SearchIssueRecord(number) {
-		o := orm.NewOrm()
-		insertSql := fmt.Sprintf("insert into issue (state, number, reporter) values('open', '%s', '%s')",
-			number, addr)
-		_, err = o.Raw(insertSql).Exec()
-		if err != nil {
+
+	o := orm.NewOrm()
+	if !models.SearchIssueRecord(number) {
+		issue := models.Issue{
+			State:    "open",
+			Number:   number,
+			Reporter: addr,
+		}
+		if _, err = o.Insert(&issue); err != nil {
 			logs.Error("Fail to create issue with reporter:", err)
-			c.ApiJsonReturn("创建issue失败", 400, err)
+			c.ApiJsonReturn("Fail to create an issue", http.StatusBadRequest, nil)
 		} else {
-			logs.Info("Save issue successfully:", number)
+			logs.Info(fmt.Sprintf("An issue had been created by user whose email address is %v, issue number:"+
+				"%v", annoyAddr, number))
 		}
 	} else {
-		o := orm.NewOrm()
-		updateSql := fmt.Sprintf("update issue set reporter='%s' where number='%s'", addr, number)
-		_, err = o.Raw(updateSql).Exec()
-		if err != nil {
+		if _, err = o.QueryTable("issue").Filter("number", number).Update(orm.Params{
+			"reporter": addr,
+		}); err != nil {
 			logs.Error("Fail to update issue reporter:", err)
-			c.ApiJsonReturn("更新issue失败", 400, err)
+			c.ApiJsonReturn("Fail to update issue", http.StatusBadRequest, nil)
 		} else {
 			logs.Info("Update issue successfully:", number)
 		}
 	}
+
 	cleanCode(addr, code)
-	go NewIssueNotify(params.ProjectId, number, issueUrl, params.Title)
-	c.ApiJsonReturn("创建成功", 200, result)
+
+	go NewIssueNotify(projectId, number, issueUrl)
+
+	c.ApiJsonReturn("Success to create an issue", http.StatusOK, result)
 }
 
 type AuthorsController struct {
@@ -390,8 +424,8 @@ type AuthorsController struct {
 
 type CommonParams struct {
 	KeyWord string `validate:"max=100"`
-	Page    int    `validate:"min=1"`
-	PerPage int    `validate:"max=100"`
+	Page    int    `validate:"min=1,max=1000000"`
+	PerPage int    `validate:"min=1,max=100"`
 }
 
 func (c *AuthorsController) Get() {
@@ -407,27 +441,26 @@ func (c *AuthorsController) Get() {
 		PerPage: perPage,
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(params)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(params); validateErr != nil {
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	offset := perPage * (page - 1)
 	o := orm.NewOrm()
 	sql := "select distinct author from issue union select distinct reporter from issue order by author"
 	count, err := o.Raw(sql).QueryRows(&issue)
 	if err != nil {
-		c.ApiJsonReturn("查询错误", 400, err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
-	separateSql := sql + fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	_, err = o.Raw(separateSql).QueryRows(&issue2)
-	if err != nil {
-		c.ApiJsonReturn("分页查询错误", 400, err)
+	separateSql := sql + fmt.Sprintf(" limit ? offset ?")
+	if _, err = o.Raw(separateSql, perPage, offset).QueryRows(&issue2); err != nil {
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
 	res := make([]string, 0)
 	for _, i := range issue2 {
 		author := i.Author
 		if strings.Contains(author, "@") {
-			author = strings.Split(author, "@")[0] + "@***" + author[len(author)-1:]
+			author = strings.Split(strings.Split(author, "@")[0], "")[0] + "***@" +
+				strings.Split(author, "@")[1]
 		}
 		res = append(res, author)
 	}
@@ -438,7 +471,8 @@ func (c *AuthorsController) Get() {
 		for _, j := range issue {
 			author := j.Author
 			if strings.Contains(author, "@") {
-				author = strings.Split(author, "@")[0] + "@***" + author[len(author)-1:]
+				author = strings.Split(strings.Split(author, "@")[0], "")[0] + "***@" +
+					strings.Split(author, "@")[1]
 			}
 			if strings.Contains(strings.ToLower(author), strings.ToLower(keyWord)) {
 				newRes = append(newRes, author)
@@ -476,19 +510,18 @@ func (c *AssigneesController) Get() {
 		PerPage: perPage,
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(params)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(params); validateErr != nil {
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	offset := perPage * (page - 1)
 	o := orm.NewOrm()
 	sql := "select distinct assignee from issue order by assignee"
 	count, err := o.Raw(sql).QueryRows(&issue)
 	if err != nil {
-		c.ApiJsonReturn("查询错误", 400, err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
-	separateSql := sql + fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	_, err = o.Raw(separateSql).QueryRows(&issue2)
+	separateSql := sql + fmt.Sprintf(" limit ? offset ?")
+	_, err = o.Raw(separateSql, perPage, offset).QueryRows(&issue2)
 	if err == nil {
 		res := make([]string, 0)
 		for _, i := range issue2 {
@@ -538,50 +571,50 @@ func (c *BranchesController) Get() {
 		PerPage: perPage,
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(params)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(params); validateErr != nil {
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	offset := perPage * (page - 1)
 	o := orm.NewOrm()
 	sql := "select distinct branch from issue order by branch"
 	count, err := o.Raw(sql).QueryRows(&issue)
 	if err != nil {
-		c.ApiJsonReturn("查询错误", 400, err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
-	separateSql := sql + fmt.Sprintf(" limit %v offset %v", perPage, offset)
-	_, err = o.Raw(separateSql).QueryRows(&issue2)
-	if err == nil {
-		res := make([]string, 0)
-		for _, i := range issue2 {
-			if i.Branch == "" {
-				count -= 1
-			} else {
-				res = append(res, i.Branch)
-			}
-		}
-		if keyWord == "" {
-			c.ApiDataReturn(count, page, perPage, res)
+	separateSql := sql + fmt.Sprintf(" limit ? offset ?")
+	if _, err = o.Raw(separateSql, perPage, offset).QueryRows(&issue2); err != nil {
+		logs.Error("Fail to query issue branches")
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
+	}
+	res := make([]string, 0)
+	for _, i := range issue2 {
+		if i.Branch == "" {
+			count -= 1
 		} else {
-			newRes := make([]string, 0)
-			for _, j := range issue {
-				if strings.Contains(strings.ToLower(j.Branch), strings.ToLower(keyWord)) {
-					newRes = append(newRes, j.Branch)
-				}
-			}
-			count = int64(len(newRes))
-			finalRes := make([]string, 0)
-			if offset > int(count) {
-				c.ApiDataReturn(count, page, perPage, finalRes)
-			}
-			if int(count) > offset && int(count) < perPage+offset {
-				c.ApiDataReturn(count, page, perPage, newRes[offset:])
-			}
-			if int(count) == 0 {
-				c.ApiDataReturn(count, page, perPage, finalRes)
-			}
-			c.ApiDataReturn(count, page, perPage, newRes[offset:offset+perPage])
+			res = append(res, i.Branch)
 		}
+	}
+	if keyWord == "" {
+		c.ApiDataReturn(count, page, perPage, res)
+	} else {
+		newRes := make([]string, 0)
+		for _, j := range issue {
+			if strings.Contains(strings.ToLower(j.Branch), strings.ToLower(keyWord)) {
+				newRes = append(newRes, j.Branch)
+			}
+		}
+		count = int64(len(newRes))
+		finalRes := make([]string, 0)
+		if offset > int(count) {
+			c.ApiDataReturn(count, page, perPage, finalRes)
+		}
+		if int(count) > offset && int(count) < perPage+offset {
+			c.ApiDataReturn(count, page, perPage, newRes[offset:])
+		}
+		if int(count) == 0 {
+			c.ApiDataReturn(count, page, perPage, finalRes)
+		}
+		c.ApiDataReturn(count, page, perPage, newRes[offset:offset+perPage])
 	}
 }
 
@@ -601,47 +634,47 @@ func (c *MilestonesController) Get() {
 		PerPage: perPage,
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(params)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(params); validateErr != nil {
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	o := orm.NewOrm()
 	var sql string
 	sql = "select distinct milestone from issue order by milestone"
-	_, err := o.Raw(sql).QueryRows(&issue)
-	if err == nil {
-		res := make([]string, 0)
-		for _, i := range issue {
-			if i.Milestone == "" {
+	if _, err := o.Raw(sql).QueryRows(&issue); err != nil {
+		logs.Error("Fail to query milestones")
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
+	}
+	res := make([]string, 0)
+	for _, i := range issue {
+		if i.Milestone == "" {
+			continue
+		}
+		for _, j := range strings.Split(i.Milestone, ",") {
+			if utils.InMap(utils.ConvertStrSlice2Map(res), j) {
 				continue
 			}
-			for _, j := range strings.Split(i.Milestone, ",") {
-				if utils.InMap(utils.ConvertStrSlice2Map(res), j) {
-					continue
-				}
-				if keyWord == "" {
+			if keyWord == "" {
+				res = append(res, j)
+			} else {
+				if strings.Contains(strings.ToLower(j), strings.ToLower(keyWord)) {
 					res = append(res, j)
-				} else {
-					if strings.Contains(strings.ToLower(j), strings.ToLower(keyWord)) {
-						res = append(res, j)
-					}
 				}
 			}
 		}
-		count := int64(len(res))
-		offset := perPage * (page - 1)
-		resp := make([]string, 0)
-		if offset > int(count) {
-			c.ApiDataReturn(count, page, perPage, resp)
-		}
-		if int(count) > offset && int(count) < perPage+offset {
-			c.ApiDataReturn(count, page, perPage, res[offset:])
-		}
-		if int(count) == 0 {
-			c.ApiDataReturn(count, page, perPage, resp)
-		}
-		c.ApiDataReturn(count, page, perPage, res[offset:offset+perPage])
 	}
+	count := int64(len(res))
+	offset := perPage * (page - 1)
+	resp := make([]string, 0)
+	if offset > int(count) {
+		c.ApiDataReturn(count, page, perPage, resp)
+	}
+	if int(count) > offset && int(count) < perPage+offset {
+		c.ApiDataReturn(count, page, perPage, res[offset:])
+	}
+	if int(count) == 0 {
+		c.ApiDataReturn(count, page, perPage, resp)
+	}
+	c.ApiDataReturn(count, page, perPage, res[offset:offset+perPage])
 }
 
 type LabelsController struct {
@@ -660,48 +693,48 @@ func (c *LabelsController) Get() {
 		PerPage: perPage,
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(params)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(params); validateErr != nil {
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	o := orm.NewOrm()
 	var sql string
 	sql = "select distinct labels from issue order by labels"
-	_, err := o.Raw(sql).QueryRows(&issue)
-	if err == nil {
-		res := make([]string, 0)
-		for _, i := range issue {
-			if i.Labels == "" {
+	if _, err := o.Raw(sql).QueryRows(&issue); err != nil {
+		logs.Error("Fail to query issue labels")
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
+	}
+	res := make([]string, 0)
+	for _, i := range issue {
+		if i.Labels == "" {
+			continue
+		}
+		for _, j := range strings.Split(i.Labels, ",") {
+			if utils.InMap(utils.ConvertStrSlice2Map(res), j) {
 				continue
 			}
-			for _, j := range strings.Split(i.Labels, ",") {
-				if utils.InMap(utils.ConvertStrSlice2Map(res), j) {
-					continue
-				}
-				if keyWord == "" {
+			if keyWord == "" {
+				res = append(res, j)
+			} else {
+				if strings.Contains(strings.ToLower(j), strings.ToLower(keyWord)) {
 					res = append(res, j)
-				} else {
-					if strings.Contains(strings.ToLower(j), strings.ToLower(keyWord)) {
-						res = append(res, j)
-					}
 				}
-
 			}
+
 		}
-		count := int64(len(res))
-		offset := perPage * (page - 1)
-		resp := make([]string, 0)
-		if offset > int(count) {
-			c.ApiDataReturn(count, page, perPage, resp)
-		}
-		if int(count) > offset && int(count) < perPage+offset {
-			c.ApiDataReturn(count, page, perPage, res[offset:])
-		}
-		if int(count) == 0 {
-			c.ApiDataReturn(count, page, perPage, resp)
-		}
-		c.ApiDataReturn(count, page, perPage, res[offset:offset+perPage])
 	}
+	count := int64(len(res))
+	offset := perPage * (page - 1)
+	resp := make([]string, 0)
+	if offset > int(count) {
+		c.ApiDataReturn(count, page, perPage, resp)
+	}
+	if int(count) > offset && int(count) < perPage+offset {
+		c.ApiDataReturn(count, page, perPage, res[offset:])
+	}
+	if int(count) == 0 {
+		c.ApiDataReturn(count, page, perPage, resp)
+	}
+	c.ApiDataReturn(count, page, perPage, res[offset:offset+perPage])
 }
 
 type TypesController struct {
@@ -714,8 +747,10 @@ type QueryIssueTypesParam struct {
 	Organization string `validate:"max=50"`
 }
 
-func formQueryIssueTypesSql(q QueryIssueTypesParam) string {
+func formQueryIssueTypesSql(q QueryIssueTypesParam) (string, []string) {
+	sqlParams := make([]string, 0, 0)
 	rawSql := "select * from issue_type"
+	const originSqlLen = 24
 	name := q.Name
 	platform := q.Platform
 	organization := q.Organization
@@ -723,27 +758,28 @@ func formQueryIssueTypesSql(q QueryIssueTypesParam) string {
 	platform = utils.CheckParams(platform)
 	organization = utils.CheckParams(organization)
 	if name != "" {
-		if len(rawSql) == 24 {
-			rawSql += fmt.Sprintf(" where name='%v'", name)
-		} else {
-			rawSql += fmt.Sprintf(" and name='%v'", name)
-		}
+		rawSql += fmt.Sprintf(" where name=?")
+		sqlParams = append(sqlParams, name)
 	}
 	if platform != "" {
-		if len(rawSql) == 24 {
-			rawSql += fmt.Sprintf(" where platform='%v'", platform)
+		if len(rawSql) == originSqlLen {
+			rawSql += fmt.Sprintf(" where platform=?")
+			sqlParams = append(sqlParams, platform)
 		} else {
-			rawSql += fmt.Sprintf(" and platform='%v'", platform)
+			rawSql += fmt.Sprintf(" and platform=?")
+			sqlParams = append(sqlParams, platform)
 		}
 	}
 	if organization != "" {
-		if len(rawSql) == 24 {
-			rawSql += fmt.Sprintf(" where organization='%v'", organization)
+		if len(rawSql) == originSqlLen {
+			rawSql += fmt.Sprintf(" where organization=?")
+			sqlParams = append(sqlParams, organization)
 		} else {
-			rawSql += fmt.Sprintf(" and organization='%v'", organization)
+			rawSql += fmt.Sprintf(" and organization=?")
+			sqlParams = append(sqlParams, organization)
 		}
 	}
-	return rawSql
+	return rawSql, sqlParams
 }
 
 func (c *TypesController) Get() {
@@ -754,18 +790,16 @@ func (c *TypesController) Get() {
 		Organization: c.GetString("organization", ""),
 	}
 	validate := validator.New()
-	validateErr := validate.Struct(qp)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(qp); validateErr != nil {
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	o := orm.NewOrm()
-	sql := formQueryIssueTypesSql(qp)
-	_, err := o.Raw(sql).QueryRows(&issueTypes)
-	if err != nil {
+	sql, sqlParams := formQueryIssueTypesSql(qp)
+	if _, err := o.Raw(sql, sqlParams).QueryRows(&issueTypes); err != nil {
 		logs.Error("Fail to query issue types, err:", err)
-		c.ApiJsonReturn("请求失败", 400, err)
+		c.ApiJsonReturn("Query error", http.StatusBadRequest, nil)
 	}
-	c.ApiJsonReturn("请求成功", 200, issueTypes)
+	c.ApiJsonReturn("Success", http.StatusOK, issueTypes)
 }
 
 type UploadImageController struct {
@@ -788,19 +822,46 @@ type FileResponse struct {
 	Url      string `json:"url"`
 }
 
+func matchUploadFileSuffix(suffix string) bool {
+	allowSuffixSlice := []string{".tiff", ".jfif", ".bmp", ".gif", ".svg", ".png", ".jpeg", ".svgz", ".jpg",
+		".webp", ".ico", ".xbm", ".pjp", ".apng", ".tif", ".pjpeg", ".avif"}
+	allowSuffixMap := make(map[string]bool, len(allowSuffixSlice))
+	for _, v := range allowSuffixSlice {
+		allowSuffixMap[v] = true
+	}
+	if _, ok := allowSuffixMap[suffix]; !ok {
+		return false
+	}
+	return true
+}
+
+func matchUploadFileSize(size int64) bool {
+	// limit the max size of the uploaded image
+	if size > 2*1024*1024 {
+		return false
+	}
+	return true
+}
+
 func (c *UploadImageController) Post() {
 	logs.Info("Ready to upload a image")
-	file, _, err := c.GetFile("file")
+	file, h, err := c.GetFile("file")
 	defer func(file multipart.File) {
-		err = file.Close()
-		if err != nil {
+		if err = file.Close(); err != nil {
 			logs.Error(err)
-			c.ApiJsonReturn("关闭File失败", 400, err)
+			c.ApiJsonReturn("Fail to release object of the upload file", http.StatusBadRequest, nil)
 		}
 	}(file)
 	if err != nil {
-		c.ApiJsonReturn("读取File失败", 400, err)
+		c.ApiJsonReturn("Fail to read content of the upload file", http.StatusBadRequest, nil)
 	}
+	if !matchUploadFileSuffix(path.Ext(h.Filename)) {
+		c.ApiJsonReturn("Invalid type of upload file", http.StatusBadRequest, nil)
+	}
+	if !matchUploadFileSize(h.Size) {
+		c.ApiJsonReturn("Beyond upload file size", http.StatusBadRequest, nil)
+	}
+
 	buf := bytes.NewBuffer(nil)
 	if _, err = io.Copy(buf, file); err != nil {
 		return
@@ -808,27 +869,28 @@ func (c *UploadImageController) Post() {
 	bufWriter := bufio.NewWriter(buf)
 	content, err := io.ReadAll(buf)
 	if err != nil {
-		logs.Error("Cannot read buf of the uploaded file")
-		c.ApiJsonReturn("上传失败", 400, err)
+		logs.Error("Cannot read buf of the uploaded file:", err)
+		c.ApiJsonReturn("Fail to upload image", http.StatusBadRequest, nil)
 	}
 	encoder := base64.NewEncoder(base64.StdEncoding, bufWriter)
-	_, err = encoder.Write(content)
-	if err != nil {
-		c.ApiJsonReturn("base64解码失败", 400, err)
+	if _, err = encoder.Write(content); err != nil {
+		logs.Error("Cannot encode the uploaded file:", err)
+		c.ApiJsonReturn("Fail to encode the upload image", http.StatusBadRequest, nil)
 	}
 	encodedString := string(buf.Bytes())
+
 	var uploadImageRequestBody UploadImageRequestBody
 	uploadImageRequestBody.Base64 = fmt.Sprintf("data:image/png;base64,%s", encodedString)
 	requestBodyByte, err := json.Marshal(uploadImageRequestBody)
 	if err != nil {
 		logs.Error("Fail to marshal request body, err:", err)
-		c.ApiJsonReturn("解析JSON异常", 400, err)
+		c.ApiJsonReturn("Fail to marshal request body", http.StatusBadRequest, nil)
 	}
 	payload := strings.NewReader(string(requestBodyByte))
 	token := config.AppConfig.V8Token
 	if token == "" {
 		logs.Warn("Cannot get a valid V8 access token")
-		c.ApiJsonReturn("认证失败", 401, "")
+		c.ApiJsonReturn("Unauthorized", http.StatusUnauthorized, nil)
 	}
 	enterpriseId := config.AppConfig.EnterpriseId
 	url := fmt.Sprintf("%v/enterprises/%v/attach_files/upload_with_base_64?access_token=%s",
@@ -836,59 +898,31 @@ func (c *UploadImageController) Post() {
 	req, err := http.NewRequest("POST", url, payload)
 	if err != nil {
 		logs.Error("Fail to send post request, err:", err)
-		c.ApiJsonReturn("发送请求异常", 400, err)
+		c.ApiJsonReturn("Fail to request", http.StatusBadRequest, nil)
 	}
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		logs.Error("Fail to upload file, err:", err)
-		c.ApiJsonReturn("发送Post请求失败", 400, err)
+		c.ApiJsonReturn("Fail to upload image file", http.StatusBadRequest, nil)
 	}
 	defer func(Body io.ReadCloser) {
-		err = Body.Close()
-		if err != nil {
-			logs.Error("Fail to close response body of uploading file")
-			c.ApiJsonReturn("Body关闭异常", 400, err)
+		if err = Body.Close(); err != nil {
+			logs.Error("Fail to close response body of uploading file:", err)
+			c.ApiJsonReturn("Fail to release response body", http.StatusBadRequest, nil)
 		}
 	}(resp.Body)
 	result, _ := io.ReadAll(resp.Body)
+
 	var uploadImageResponse UploadImageResponse
-	err = json.Unmarshal(result, &uploadImageResponse)
-	if err != nil {
+	if err = json.Unmarshal(result, &uploadImageResponse); err != nil {
 		logs.Error("Fail to unmarshal response to json, err:", err)
-		c.ApiJsonReturn("反解析JSON异常", 400, err)
+		c.ApiJsonReturn("Fail to unmarshal response to json", http.StatusBadRequest, nil)
 	}
 	if uploadImageResponse.Success == true {
-		c.ApiJsonReturn("上传成功", 200, uploadImageResponse.File)
+		c.ApiJsonReturn("Success to upload image", http.StatusOK, uploadImageResponse.File)
 	}
-	c.ApiJsonReturn("上传失败", 400, uploadImageResponse.Message)
-}
-
-func SearchIssueRecord(number string) bool {
-	o := orm.NewOrm()
-	searchSql := fmt.Sprintf("select * from issue where number='%s'", number)
-	err := o.Raw(searchSql).QueryRow()
-	if err == orm.ErrNoRows {
-		return false
-	}
-	return true
-}
-
-func GetIssuePriority(priorityNum float64) string {
-	switch priorityNum {
-	case 0:
-		return "不指定"
-	case 1:
-		return "不重要"
-	case 2:
-		return "次要"
-	case 3:
-		return "主要"
-	case 4:
-		return "严重"
-	default:
-		return "不指定"
-	}
+	c.ApiJsonReturn("Fail to upload image", http.StatusBadRequest, uploadImageResponse.Message)
 }
 
 type NotifyConf struct {
@@ -902,16 +936,15 @@ type NotifyConf struct {
 	}
 }
 
-func NewIssueNotify(enterpriseNumber int, number, link, title string) {
-	sigName, repoName := SearchRepoByNumber(enterpriseNumber)
+func NewIssueNotify(enterpriseNumber int, number, link string) {
+	sigName, repoName := models.SearchRepoByNumber(enterpriseNumber)
 	if sigName == "" || repoName == "" {
 		return
 	}
 
 	var notifyConf = &NotifyConf{}
-	err := config.LoadFromYaml("conf/new_issue_notify.yaml", notifyConf)
-	if err != nil {
-		logs.Error(err)
+	if err := config.LoadFromYaml("conf/new_issue_notify.yaml", notifyConf); err != nil {
+		logs.Error("Fail to load notify yaml:", err)
 		return
 	}
 	sigs := notifyConf.Sigs
@@ -925,9 +958,8 @@ func NewIssueNotify(enterpriseNumber int, number, link, title string) {
 			receivers := sig.Receivers
 			for _, receiver := range receivers {
 				ep := utils.EmailParams{Receiver: receiver, Repo: repoName, Number: number, Link: link}
-				err = utils.SendNewIssueNotifyEmail(ep)
-				if err != nil {
-					logs.Error(err)
+				if err := utils.SendNewIssueNotifyEmail(ep); err != nil {
+					logs.Error("Fail to send new issue notify:", err)
 				}
 			}
 			break
@@ -941,9 +973,8 @@ func NewIssueNotify(enterpriseNumber int, number, link, title string) {
 			receivers := repo.Receivers
 			for _, receiver := range receivers {
 				ep := utils.EmailParams{Receiver: receiver, Repo: repoName, Number: number, Link: link}
-				err = utils.SendNewIssueNotifyEmail(ep)
-				if err != nil {
-					logs.Error(err)
+				if err := utils.SendNewIssueNotifyEmail(ep); err != nil {
+					logs.Error("Fail to send new issue notify:", err)
 				}
 			}
 			break

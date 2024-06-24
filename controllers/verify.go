@@ -4,17 +4,19 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
+	"math/big"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
-	beego "github.com/beego/beego/v2/server/web"
 	"github.com/go-playground/validator/v10"
-	"io"
+
 	"issue_pr_board/config"
 	"issue_pr_board/models"
 	"issue_pr_board/utils"
-	"math/big"
-	"net/http"
-	"time"
 )
 
 type GeneralResp struct {
@@ -36,43 +38,23 @@ func genValidateCode(width int) string {
 	return validateCode
 }
 
-func searchEmailRecord(addr string) bool {
-	o := orm.NewOrm()
-	searchSql := fmt.Sprintf("select * from verify where addr='%s'", addr)
-	err := o.Raw(searchSql).QueryRow()
-	if err == orm.ErrNoRows {
-		return false
-	}
-	return true
-}
-
-func checkCode(addr string, code string) bool {
-	o := orm.NewOrm()
-	searchSql := fmt.Sprintf("select * from verify where addr='%s' and code='%s'", addr, code)
-	err := o.Raw(searchSql).QueryRow()
-	if err == orm.ErrNoRows {
-		return false
-	}
-	return true
-}
-
 func cleanCode(addr string, code string) {
 	o := orm.NewOrm()
-	sql := fmt.Sprintf("delete from verify where addr='%s' and code='%s'", addr, code)
-	_, err := o.Raw(sql).Exec()
+	qt := o.QueryTable("verify")
+	num, err := qt.Filter("addr", addr).Filter("code", code).Delete()
 	if err != nil {
 		logs.Error("Fail to delete verify record, err:", err)
-	} else {
-		logs.Info("The expired record had been deleted which addr is:", addr)
+	}
+	annoyAddr := strings.Split(strings.Split(addr, "@")[0], "")[0] + "***@" + strings.Split(addr, "@")[1]
+	if num != 0 {
+		logs.Info("The expired record had been deleted which addr is:", annoyAddr)
 	}
 }
 
 func CleanVerification() error {
 	var verifications []models.Verify
 	o := orm.NewOrm()
-	sql := "select * from verify"
-	_, err := o.Raw(sql).QueryRows(&verifications)
-	if err != nil {
+	if _, err := o.QueryTable("verify").All(&verifications); err != nil {
 		logs.Error("Fail to get all verify records")
 		return err
 	}
@@ -98,7 +80,7 @@ func (c *GetCaptchaController) Get() {
 	data := make(map[string]interface{})
 	data["captcha_id"] = captchaId
 	data["src"] = fmt.Sprintf("/captcha/%v.png", captchaId)
-	c.ApiJsonReturn("success", 200, data)
+	c.ApiJsonReturn("Success", http.StatusOK, data)
 }
 
 type CheckCaptchaController struct {
@@ -108,52 +90,53 @@ type CheckCaptchaController struct {
 func (c *CheckCaptchaController) Post() {
 	params, err := getParams(c.Ctx.Request)
 	validate := validator.New()
-	validateErr := validate.Struct(params)
-	if validateErr != nil {
-		c.ApiJsonReturn("参数错误", 400, validateErr)
+	if validateErr := validate.Struct(params); validateErr != nil {
+		c.ApiJsonReturn("Invalid params", http.StatusBadRequest, nil)
 	}
 	if !utils.VerifyCaptcha(params.CaptchaId, params.Challenge) {
-		c.ApiJsonReturn("验证失败", 400, nil)
+		c.ApiJsonReturn("Verification error", http.StatusBadRequest, nil)
 	}
+
 	captchaValue := genValidateCode(6)
 	timeUnix := time.Now().Unix()
-	interval, _ := beego.AppConfig.Int64("verifyinterval")
+	interval := config.AppConfig.VerifyInterval
+
 	var verify models.Verify
-	ep := utils.EmailParams{Receiver: params.Email, Code: captchaValue}
-	if searchEmailRecord(params.Email) {
-		o := orm.NewOrm()
+	addr := strings.ToLower(params.Email)
+	ep := utils.EmailParams{Receiver: addr, Code: captchaValue}
+	o := orm.NewOrm()
+	if models.SearchEmailRecord(addr) {
 		qs := o.QueryTable("verify")
-		err = qs.Filter("addr", params.Email).One(&verify)
-		if err != nil {
-			c.ApiJsonReturn("系统异常，请联系管理", 400, nil)
+		if err = qs.Filter("addr", addr).One(&verify); err != nil {
+			c.ApiJsonReturn("Server error", http.StatusInternalServerError, nil)
 		}
+		annoyAddr := strings.Split(strings.Split(addr, "@")[0], "")[0] + "***@" +
+			strings.Split(addr, "@")[1]
 		created := verify.Created
 		if (timeUnix - created) < interval {
-			logs.Error("The interval between two verifications cannot be less than 1 minute, addr:", params.Email)
-			c.ApiJsonReturn("发送验证码的时间间隔不能低于一分钟", 400, nil)
+			logs.Error("The interval between two verifications cannot be less than 1 minute, addr:", annoyAddr)
+			c.ApiJsonReturn("The interval between two verifications cannot be less than 1 minute",
+				http.StatusBadRequest, nil)
 		}
 		go utils.SendVerifyEmail(ep)
-		_, err = qs.Filter("addr", params.Email).Update(orm.Params{
+		if _, err = qs.Filter("addr", addr).Update(orm.Params{
 			"Code":    captchaValue,
 			"Created": created,
-		})
-		if err != nil {
+		}); err != nil {
 			logs.Error("Fail to update verify, err:", err)
-			c.ApiJsonReturn("系统异常，请联系管理", 400, nil)
+			c.ApiJsonReturn("Server error", http.StatusInternalServerError, nil)
 		}
 	} else {
-		verify.Addr = params.Email
+		verify.Addr = addr
 		verify.Code = captchaValue
 		verify.Created = timeUnix
 		go utils.SendVerifyEmail(ep)
-		o := orm.NewOrm()
-		_, err = o.Insert(&verify)
-		if err != nil {
+		if _, err = o.Insert(&verify); err != nil {
 			logs.Error("Insert verify failed, err:", err)
-			c.ApiJsonReturn("系统异常，请联系管理", 400, nil)
+			c.ApiJsonReturn("Server error", http.StatusInternalServerError, nil)
 		}
 	}
-	c.ApiJsonReturn("邮箱验证码发送成功", 200, nil)
+	c.ApiJsonReturn("Success to send verification", http.StatusOK, nil)
 }
 
 type clientParams struct {
@@ -168,8 +151,7 @@ func getParams(request *http.Request) (*clientParams, error) {
 	if len(all) <= 0 {
 		return nil, nil
 	}
-	err := json.Unmarshal(all, params)
-	if err != nil {
+	if err := json.Unmarshal(all, params); err != nil {
 		return nil, err
 	}
 	return params, nil

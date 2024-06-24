@@ -6,6 +6,7 @@ require (
 	github.com/beego/beego/v2 v2.2.1
 	github.com/go-playground/validator/v10 v10.15.1
 	github.com/go-sql-driver/mysql v1.8.1
+	golang.org/x/time v0.5.0
 	sigs.k8s.io/yaml v1.4.0
 )
 
